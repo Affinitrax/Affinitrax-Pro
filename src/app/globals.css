@@ -1,26 +1,64 @@
 @import "tailwindcss";
 
+@theme {
+  --color-background: #080810;
+  --color-surface: #0e0e1a;
+  --color-surface-2: #13131f;
+  --color-border: rgba(255,255,255,0.07);
+  --color-cyan: #00d4ff;
+  --color-purple: #7c3aed;
+  --color-gold: #f59e0b;
+  --color-text: #e2e8f0;
+  --color-muted: #94a3b8;
+
+  --font-display: "Clash Display", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  background: #080810;
+  color: #e2e8f0;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #080810;
+  color: #e2e8f0;
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Grain texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.4;
+}
+
+/* Gradient utilities */
+.gradient-text {
+  background: linear-gradient(135deg, #00d4ff, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-border {
+  border: 1px solid transparent;
+  background-clip: padding-box;
+  position: relative;
+}
+
+.glass {
+  background: rgba(14, 14, 26, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.07);
 }

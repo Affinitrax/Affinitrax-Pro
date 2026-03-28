@@ -1,0 +1,45 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-03-25T03:35:20.552Z",
+  "phase": "01",
+  "phase_name": "affinitrax-v1",
+  "phase_dir": ".planning/phases/01-affinitrax-v1",
+  "plan": 1,
+  "task": 8,
+  "total_tasks": 8,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Project scaffold + brand tokens + public pages", "status": "done"},
+    {"id": 2, "name": "Supabase integration + auth (login/signup)", "status": "done"},
+    {"id": 3, "name": "Portal dashboard + deals + postbacks", "status": "done"},
+    {"id": 4, "name": "API routes: contact, postback S2S, track redirect", "status": "done"},
+    {"id": 5, "name": "FTD tracking + deal_partners blind brokerage layer", "status": "done"},
+    {"id": 6, "name": "Portal: reports + billing pages", "status": "done"},
+    {"id": 7, "name": "Portal: integrations page (seller tracking links + buyer postback URLs)", "status": "done"},
+    {"id": 8, "name": "Portal: inquiries admin page + admin user confirmed + deployed to Vercel", "status": "done"}
+  ],
+  "remaining_tasks": [],
+  "blockers": [],
+  "human_actions_pending": [
+    {
+      "action": "Delete/rotate Vercel token (was stored here, now rotated)",
+      "context": "Was used for CLI deploys, no longer needed now that project is live",
+      "blocking": false
+    },
+    {
+      "action": "Point affinitrax.com DNS → affinitrax-platform.vercel.app",
+      "context": "Domain cutover to custom domain",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {"decision": "Next.js 15.5.14 (not 16)", "rationale": "16.x has silent Vercel failures; 15.2.4 blocked by CVE-2025-66478", "phase": "01"},
+    {"decision": "No GitHub integration on Vercel project", "rationale": "GitHub-linked projects fail silently on CLI deploy", "phase": "01"},
+    {"decision": "Blind brokerage via deal_partners table", "rationale": "Buyers/sellers never see each other's links; broker controls all routing", "phase": "01"},
+    {"decision": "FTD as valid event_type in postback_events", "rationale": "Critical for Crypto/FX CPA deals; added via DB migration", "phase": "01"},
+    {"decision": "Anon key in .env.local is public-facing by design", "rationale": "Supabase RLS handles security; anon key is safe in client code", "phase": "01"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Test full portal E2E: login as cryp70.ai@gmail.com, create a deal, test integration links, fire a postback, verify reports/billing update",
+  "context_notes": "V1 is fully built and live at https://affinitrax-platform.vercel.app. Admin confirmed. All portal pages functional. Pending: domain cutover, Telegram alerts for new inquiries/FTDs, and V2 features (seller scoring, smart routing)."
+}
