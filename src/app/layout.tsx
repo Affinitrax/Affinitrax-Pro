@@ -20,13 +20,13 @@ export const metadata: Metadata = {
     siteName: "Affinitrax",
     title: "Affinitrax — All Signal. No Noise.",
     description: "Premium traffic brokerage. Verified buyers and sellers. CPA & CRG.",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
+    images: [{ url: "https://affinitrax.com/opengraph-image", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Affinitrax — All Signal. No Noise.",
     description: "Premium traffic brokerage. Verified buyers and sellers. CPA & CRG.",
-    images: ["/opengraph-image"],
+    images: ["https://affinitrax.com/opengraph-image"],
   },
   icons: {
     icon: "/icon",
