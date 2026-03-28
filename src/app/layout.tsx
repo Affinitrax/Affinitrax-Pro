@@ -17,6 +17,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     type: "website",
+    url: "https://affinitrax.com",
     siteName: "Affinitrax",
     title: "Affinitrax — All Signal. No Noise.",
     description: "Premium traffic brokerage. Verified buyers and sellers. CPA & CRG.",
