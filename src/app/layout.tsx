@@ -32,6 +32,14 @@ export const metadata: Metadata = {
     icon: "/icon",
     apple: "/apple-icon",
   },
+  manifest: "/manifest.webmanifest",
+  other: {
+    "theme-color": "#07070f",
+    "mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
+    "apple-mobile-web-app-title": "Affinitrax",
+  },
 };
 
 export default function RootLayout({
