@@ -21,10 +21,10 @@ export const metadata: Metadata = {
     siteName: "Affinitrax",
     title: "Affinitrax — All Signal. No Noise.",
     description: "Premium traffic brokerage. Verified buyers and sellers. CPA & CRG.",
-    images: [{ url: "https://affinitrax.com/og.png", width: 1200, height: 630, alt: "Affinitrax" }],
+    images: [{ url: "https://affinitrax.com/og.png", width: 180, height: 180, alt: "Affinitrax" }],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "Affinitrax — All Signal. No Noise.",
     description: "Premium traffic brokerage. Verified buyers and sellers. CPA & CRG.",
     images: ["https://affinitrax.com/og.png"],
