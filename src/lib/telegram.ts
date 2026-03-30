@@ -46,6 +46,7 @@ export function formatInquiryMessage(inquiry: {
   name?: string;
   email: string;
   company?: string;
+  telegram?: string;
   type?: string;
   vertical?: string;
   message?: string;
@@ -56,12 +57,16 @@ export function formatInquiryMessage(inquiry: {
   const vertical = inquiry.vertical
     ? inquiry.vertical.charAt(0).toUpperCase() + inquiry.vertical.slice(1)
     : "—";
+  const tg = inquiry.telegram
+    ? (inquiry.telegram.startsWith("@") ? inquiry.telegram : `@${inquiry.telegram}`)
+    : "—";
 
   return [
     `🔔 <b>New Inquiry — Affinitrax</b>`,
     ``,
     `👤 <b>Name:</b> ${inquiry.name || "—"}`,
     `📧 <b>Email:</b> ${inquiry.email}`,
+    `✈️ <b>Telegram:</b> ${tg}`,
     `🏢 <b>Company:</b> ${inquiry.company || "—"}`,
     `👥 <b>Role:</b> ${role}`,
     `📊 <b>Vertical:</b> ${vertical}`,

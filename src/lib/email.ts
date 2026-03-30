@@ -44,6 +44,7 @@ export async function sendInquiryNotification(inquiry: {
   name?: string;
   email: string;
   company?: string;
+  telegram?: string;
   type?: string;
   vertical?: string;
   message?: string;
@@ -53,6 +54,9 @@ export async function sendInquiryNotification(inquiry: {
     : "—";
   const vertical = inquiry.vertical
     ? inquiry.vertical.charAt(0).toUpperCase() + inquiry.vertical.slice(1)
+    : "—";
+  const tg = inquiry.telegram
+    ? (inquiry.telegram.startsWith("@") ? inquiry.telegram : `@${inquiry.telegram}`)
     : "—";
 
   // Notify you
@@ -70,6 +74,7 @@ export async function sendInquiryNotification(inquiry: {
         <table style="width:100%;border-collapse:collapse;">
           <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;width:120px;">Name</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${inquiry.name || "—"}</td></tr>
           <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Email</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="mailto:${inquiry.email}" style="color:#00d4ff;">${inquiry.email}</a></td></tr>
+          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Telegram</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="https://t.me/${tg.replace('@','')}" style="color:#00d4ff;">${tg}</a></td></tr>
           <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Company</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${inquiry.company || "—"}</td></tr>
           <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Role</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${role}</td></tr>
           <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Vertical</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${vertical}</td></tr>

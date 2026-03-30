@@ -21,6 +21,7 @@ export default function ContactForm() {
       name: data.get("name") as string,
       email: data.get("email") as string,
       company: data.get("company") as string,
+      telegram: data.get("telegram") as string,
       type: data.get("role") as string,
       vertical: data.get("vertical") as string,
       message: data.get("message") as string,
@@ -101,18 +102,32 @@ export default function ContactForm() {
             </div>
           </div>
 
-          {/* Company */}
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="company" className="text-xs text-[#94a3b8] uppercase tracking-wider">
-              Company
-            </label>
-            <input
-              id="company"
-              type="text"
-              name="company"
-              placeholder="Your company or network"
-              className={inputBase}
-            />
+          {/* Company + Telegram */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="company" className="text-xs text-[#94a3b8] uppercase tracking-wider">
+                Company
+              </label>
+              <input
+                id="company"
+                type="text"
+                name="company"
+                placeholder="Your company or network"
+                className={inputBase}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="telegram" className="text-xs text-[#94a3b8] uppercase tracking-wider">
+                Telegram Handle
+              </label>
+              <input
+                id="telegram"
+                type="text"
+                name="telegram"
+                placeholder="@yourhandle"
+                className={inputBase}
+              />
+            </div>
           </div>
 
           {/* Role + Vertical */}

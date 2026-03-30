@@ -6,7 +6,7 @@ import { sendInquiryNotification } from "@/lib/email";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, company, type, vertical, message } = body;
+    const { name, email, company, telegram, type, vertical, message } = body;
 
     if (!email || !message) {
       return NextResponse.json(
@@ -32,11 +32,11 @@ export async function POST(request: NextRequest) {
 
     // Fire Telegram notification — non-blocking
     sendTelegramMessage(
-      formatInquiryMessage({ name, email, company, type, vertical, message })
+      formatInquiryMessage({ name, email, company, telegram, type, vertical, message })
     ).catch((err) => console.error("[Telegram] Notification error:", err));
 
     // Fire email notifications — non-blocking
-    sendInquiryNotification({ name, email, company, type, vertical, message })
+    sendInquiryNotification({ name, email, company, telegram, type, vertical, message })
       .catch((err) => console.error("[Resend] Email notification error:", err));
 
     return NextResponse.json({ success: true });
