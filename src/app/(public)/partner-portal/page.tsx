@@ -300,7 +300,7 @@ export default function PartnerPortalPage() {
         {/* CTAs */}
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
           <Link
-            href="/contact"
+            href="/apply"
             className="rounded-lg bg-gradient-to-r from-[#00d4ff] to-[#7c3aed] px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
           >
             Apply for Access
@@ -605,7 +605,7 @@ export default function PartnerPortalPage() {
           </p>
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <Link
-              href="/contact"
+              href="/apply"
               className="inline-block rounded-lg bg-gradient-to-r from-[#00d4ff] to-[#7c3aed] px-9 py-4 text-base font-semibold text-white shadow-xl shadow-cyan-500/20 transition-opacity hover:opacity-90"
             >
               Apply for Access

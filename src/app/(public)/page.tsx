@@ -217,10 +217,10 @@ export default function HomePage() {
               Start a Deal
             </Link>
             <Link
-              href="/marketplace"
+              href="/partner-portal"
               className="rounded-lg border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-semibold text-[#e2e8f0] backdrop-blur-sm transition-colors hover:border-white/30 hover:bg-white/10"
             >
-              Browse Marketplace
+              Explore the Portal
             </Link>
           </div>
         </FadeIn>
