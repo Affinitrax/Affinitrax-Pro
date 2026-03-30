@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { Suspense } from "react";
 
 function SignupForm() {
@@ -17,8 +16,6 @@ function SignupForm() {
   const [validating, setValidating] = useState(!!token);
   const [tokenValid, setTokenValid] = useState(false);
   const [done, setDone] = useState(false);
-
-  const supabase = createClient();
 
   useEffect(() => {
     if (!token) return;
@@ -43,20 +40,21 @@ function SignupForm() {
     setLoading(true);
     setError("");
 
-    const { error: signupError } = await supabase.auth.signUp({ email, password });
+    // Use server-side route — creates user with email already confirmed
+    // (email verified via invite token, no Supabase confirmation email needed)
+    const res = await fetch("/api/invite/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, password }),
+    });
 
-    if (signupError) {
-      setError(signupError.message);
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error ?? "Failed to create account");
       setLoading(false);
       return;
     }
-
-    // Mark token as used
-    await fetch("/api/invite/use", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
 
     setDone(true);
     setLoading(false);
