@@ -9,6 +9,7 @@ const navLinks = [
   { label: "Sellers", href: "/sellers" },
   { label: "Marketplace", href: "/marketplace" },
   { label: "Pricing", href: "/pricing" },
+  { label: "Partner Portal", href: "/partner-portal" },
   { label: "About", href: "/about" },
 ];
 
