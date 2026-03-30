@@ -59,8 +59,11 @@ export default function AdminUsersPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
+    const roleUpdate = patch.status === "approved" ? { role: "partner" }
+      : patch.status === "pending" || patch.status === "suspended" ? { role: "pending" }
+      : {};
     setPartners((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...patch } : p))
+      prev.map((p) => (p.id === id ? { ...p, ...patch, ...roleUpdate } : p))
     );
     setSaving(null);
   }

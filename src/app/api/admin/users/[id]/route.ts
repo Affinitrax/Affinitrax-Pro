@@ -32,8 +32,8 @@ export async function PATCH(
   if (status !== undefined) {
     update.status = status;
     // Sync verified flag with approval status
-    if (status === "approved") update.verified = true;
-    else if (status === "suspended" || status === "pending") update.verified = false;
+    if (status === "approved") { update.verified = true; update.role = "partner"; }
+    else if (status === "suspended" || status === "pending") { update.verified = false; update.role = "pending"; }
   }
   if (badge !== undefined) update.badge = badge;
 
