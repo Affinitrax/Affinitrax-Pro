@@ -17,18 +17,19 @@ export default function OGImage() {
           overflow: "hidden",
         }}
       >
-        {/* ── Background grid ──────────────────────────────────────────── */}
+        {/* Background grid */}
         <div
           style={{
             position: "absolute",
             inset: 0,
+            display: "flex",
             backgroundImage:
               "linear-gradient(rgba(0,212,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,212,255,0.035) 1px, transparent 1px)",
             backgroundSize: "60px 60px",
           }}
         />
 
-        {/* ── Right-side ambient glow ───────────────────────────────────── */}
+        {/* Right-side ambient glow */}
         <div
           style={{
             position: "absolute",
@@ -39,10 +40,11 @@ export default function OGImage() {
               "radial-gradient(ellipse, rgba(0,212,255,0.09) 0%, rgba(124,58,237,0.06) 40%, transparent 70%)",
             top: -100,
             right: -80,
+            display: "flex",
           }}
         />
 
-        {/* ── Bottom-left subtle glow ───────────────────────────────────── */}
+        {/* Bottom-left subtle glow */}
         <div
           style={{
             position: "absolute",
@@ -53,10 +55,11 @@ export default function OGImage() {
               "radial-gradient(ellipse, rgba(124,58,237,0.06) 0%, transparent 70%)",
             bottom: -150,
             left: -50,
+            display: "flex",
           }}
         />
 
-        {/* ── Left accent bar ───────────────────────────────────────────── */}
+        {/* Left accent bar */}
         <div
           style={{
             position: "absolute",
@@ -65,10 +68,11 @@ export default function OGImage() {
             width: 4,
             height: "100%",
             background: "linear-gradient(180deg, transparent 0%, #00d4ff 30%, #7c3aed 70%, transparent 100%)",
+            display: "flex",
           }}
         />
 
-        {/* ── LEFT CONTENT (55% width) ──────────────────────────────────── */}
+        {/* LEFT CONTENT (55% width) */}
         <div
           style={{
             display: "flex",
@@ -119,24 +123,26 @@ export default function OGImage() {
             </div>
           </div>
 
-          {/* Main headline */}
-          <div
-            style={{
-              fontSize: 58,
-              fontWeight: 800,
-              color: "#e2e8f0",
-              lineHeight: 1.1,
-              letterSpacing: "-1.5px",
-              marginBottom: 20,
-            }}
-          >
-            Premium Traffic
-            <br />
+          {/* Main headline — split into two spans to avoid br */}
+          <div style={{ display: "flex", flexDirection: "column", marginBottom: 20 }}>
             <span
               style={{
-                background: "linear-gradient(90deg, #00d4ff 0%, #7c3aed 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
+                fontSize: 58,
+                fontWeight: 800,
+                color: "#e2e8f0",
+                lineHeight: 1.1,
+                letterSpacing: "-1.5px",
+              }}
+            >
+              Premium Traffic
+            </span>
+            <span
+              style={{
+                fontSize: 58,
+                fontWeight: 800,
+                color: "#00d4ff",
+                lineHeight: 1.1,
+                letterSpacing: "-1.5px",
               }}
             >
               Brokerage Platform
@@ -144,48 +150,36 @@ export default function OGImage() {
           </div>
 
           {/* Subline */}
-          <div
-            style={{
-              fontSize: 21,
-              color: "#64748b",
-              letterSpacing: "0.02em",
-              marginBottom: 44,
-              lineHeight: 1.5,
-            }}
-          >
-            Verified buyers & sellers. CPA &amp; CRG models.
-            <br />
-            S2S tracking. Invite-only network.
+          <div style={{ display: "flex", flexDirection: "column", marginBottom: 44 }}>
+            <span style={{ fontSize: 21, color: "#64748b", letterSpacing: "0.02em", lineHeight: 1.5 }}>
+              Verified buyers and sellers. CPA and CRG models.
+            </span>
+            <span style={{ fontSize: 21, color: "#64748b", letterSpacing: "0.02em", lineHeight: 1.5 }}>
+              S2S tracking. Invite-only network.
+            </span>
           </div>
 
-          {/* Stat chips */}
+          {/* Stat chips — removed special Unicode icons */}
           <div style={{ display: "flex", gap: 12 }}>
-            {[
-              { label: "CPA & CRG", icon: "◈" },
-              { label: "S2S Tracking", icon: "⬡" },
-              { label: "10+ GEOs", icon: "◉" },
-              { label: "Invite Only", icon: "◆" },
-            ].map((item) => (
+            {["CPA & CRG", "S2S Tracking", "10+ GEOs", "Invite Only"].map((label) => (
               <div
-                key={item.label}
+                key={label}
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 6,
                   padding: "9px 16px",
                   borderRadius: 8,
                   background: "rgba(0,212,255,0.06)",
                   border: "1px solid rgba(0,212,255,0.18)",
                 }}
               >
-                <span style={{ color: "#00d4ff", fontSize: 13 }}>{item.icon}</span>
-                <span style={{ color: "#94a3b8", fontSize: 14, fontWeight: 500 }}>{item.label}</span>
+                <span style={{ color: "#94a3b8", fontSize: 14, fontWeight: 500 }}>{label}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ── RIGHT PANEL (abstract visual) ────────────────────────────── */}
+        {/* RIGHT PANEL */}
         <div
           style={{
             position: "absolute",
@@ -207,6 +201,7 @@ export default function OGImage() {
               bottom: 60,
               width: 1,
               background: "linear-gradient(180deg, transparent, rgba(0,212,255,0.2) 30%, rgba(124,58,237,0.2) 70%, transparent)",
+              display: "flex",
             }}
           />
 
@@ -230,7 +225,6 @@ export default function OGImage() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                backdropFilter: "blur(10px)",
               }}
             >
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -251,10 +245,9 @@ export default function OGImage() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 20,
                 }}
               >
-                📊
+                <span style={{ fontSize: 20 }}>📊</span>
               </div>
             </div>
 
@@ -288,10 +281,9 @@ export default function OGImage() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 20,
                 }}
               >
-                🤝
+                <span style={{ fontSize: 20 }}>🤝</span>
               </div>
             </div>
 
@@ -339,21 +331,21 @@ export default function OGImage() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 20,
                 }}
               >
-                🌐
+                <span style={{ fontSize: 20 }}>🌐</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Domain watermark ─────────────────────────────────────────── */}
+        {/* Domain watermark */}
         <div
           style={{
             position: "absolute",
             bottom: 32,
             left: 72,
+            display: "flex",
             color: "#1e293b",
             fontSize: 15,
             letterSpacing: "0.12em",
