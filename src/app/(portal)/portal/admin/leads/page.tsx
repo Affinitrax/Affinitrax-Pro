@@ -24,8 +24,9 @@ const STATUS_STYLES: Record<string, string> = {
   received: "bg-[#1e293b] text-[#94a3b8] border border-white/10",
   relaying: "bg-blue-500/15 text-blue-400 border border-blue-500/30",
   relayed: "bg-green-500/15 text-green-400 border border-green-500/30",
+  parked: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
   failed: "bg-red-500/15 text-red-400 border border-red-500/30",
-  ftd: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+  ftd: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
   rejected: "bg-[#1e293b] text-[#475569] border border-white/10",
 };
 
@@ -43,7 +44,7 @@ export default function AdminLeadsPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const params = new URLSearchParams({ page: String(page), limit: "50" });
+      const params = new URLSearchParams({ page: String(page), limit: "25" });
       if (filterStatus) params.set("status", filterStatus);
       if (filterEmail) params.set("email", filterEmail);
       if (filterDeal) params.set("deal_id", filterDeal);
@@ -99,6 +100,7 @@ export default function AdminLeadsPage() {
           <option value="received">Received</option>
           <option value="relaying">Relaying</option>
           <option value="relayed">Relayed</option>
+          <option value="parked">Parked</option>
           <option value="failed">Failed</option>
           <option value="ftd">FTD</option>
           <option value="rejected">Rejected</option>
@@ -191,30 +193,29 @@ export default function AdminLeadsPage() {
             </div>
           </div>
 
-          {/* Pagination */}
-          {pages > 1 && (
-            <div className="flex items-center justify-between mt-4">
-              <p className="text-xs text-[#475569]">
-                Page {page} of {pages} · {total.toLocaleString()} leads
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1.5 rounded-lg text-xs text-[#94a3b8] bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  ← Prev
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.min(pages, p + 1))}
-                  disabled={page === pages}
-                  className="px-3 py-1.5 rounded-lg text-xs text-[#94a3b8] bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next →
-                </button>
-              </div>
+          {/* Pagination — always visible */}
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-xs text-[#475569]">
+              Showing {((page - 1) * 25) + 1}–{Math.min(page * 25, total)} of {total.toLocaleString()} leads
+              {pages > 1 && <span className="ml-1">· Page {page} of {pages}</span>}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 rounded-lg text-xs text-[#94a3b8] bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                ← Prev
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                disabled={page === pages}
+                className="px-3 py-1.5 rounded-lg text-xs text-[#94a3b8] bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Next →
+              </button>
             </div>
-          )}
+          </div>
         </>
       )}
     </main>

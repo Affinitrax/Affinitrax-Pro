@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
@@ -43,6 +44,20 @@ export default async function ReportsPage() {
 
   const dealIds = (deals || []).map((d: { id: string }) => d.id);
 
+  // Get lead counts per deal from leads table (requires admin client — RLS service_role only)
+  const adminClient = createAdminClient();
+  const leadCountMap: Record<string, number> = {};
+  if (dealIds.length > 0) {
+    const { data: leadRows } = await adminClient
+      .from("leads")
+      .select("deal_id")
+      .in("deal_id", dealIds)
+      .eq("is_test", false);
+    for (const row of (leadRows ?? []) as { deal_id: string }[]) {
+      leadCountMap[row.deal_id] = (leadCountMap[row.deal_id] ?? 0) + 1;
+    }
+  }
+
   // Get all postback events for user's deals
   const { data: events } = await supabase
     .from("postback_events")
@@ -60,7 +75,7 @@ export default async function ReportsPage() {
   const stats = typedDeals.map((deal) => {
     const dealEvents = typedEvents.filter((e) => e.deal_id === deal.id);
     const clicks = dealEvents.filter((e) => e.event_type === "click").length;
-    const leads = dealEvents.filter((e) => e.event_type === "lead" || e.event_type === "registration").length;
+    const leads = leadCountMap[deal.id] ?? 0;
     const ftds = dealEvents.filter((e) => e.event_type === "ftd" || e.event_type === "conversion" || e.event_type === "deposit").length;
     const totalRevenue = dealEvents.reduce((sum, e) => sum + (e.revenue || 0), 0);
     const totalPayout = dealEvents.reduce((sum, e) => sum + (e.payout || 0), 0);
