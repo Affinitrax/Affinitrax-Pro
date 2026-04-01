@@ -42,8 +42,8 @@ export async function POST(req: Request) {
     ip_whitelist_required, notes, status,
   } = body;
 
-  if (!deal_id || !name || !endpoint_url || !auth_type) {
-    return NextResponse.json({ error: "deal_id, name, endpoint_url, auth_type are required" }, { status: 400 });
+  if (!deal_id || !name || !auth_type) {
+    return NextResponse.json({ error: "deal_id, name, auth_type are required" }, { status: 400 });
   }
 
   let auth_header_value_enc: string | null = null;
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     .insert({
       deal_id,
       name,
-      endpoint_url,
+      endpoint_url: endpoint_url || "https://placeholder.affinitrax.com",
       auth_type,
       auth_header_name: auth_header_name ?? "Authorization",
       auth_header_value_enc,
