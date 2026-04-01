@@ -30,6 +30,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { relayLead } from "@/lib/integration/relay";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export async function POST(req: Request) {
   // ── Rate limit: 200 leads per IP per minute ───────────────────────────────
@@ -170,12 +171,21 @@ export async function POST(req: Request) {
       sub3: typeof body.sub3 === "string" ? body.sub3 : undefined,
     });
 
+    const isParked = result.relay_error === "parked";
+    if (isParked) {
+      // Notify admin — lead is safe but needs a buyer integration
+      sendTelegramMessage(
+        `🅿️ Lead parked — deal ${apiKey.deal_id.slice(0, 8)}\n` +
+        `Email: ${email}\nNo active buyer integration. Configure one at /portal/admin/integrations`
+      ).catch(() => {});
+    }
     return NextResponse.json({
       lead_id: lead.id,
-      status: result.success ? "relayed" : "failed",
-      buyer_lead_id: result.buyer_lead_id,
-      redirect_url: result.redirect_url,
-      ...(result.relay_error ? { error: result.relay_error } : {}),
+      status: result.success ? "relayed" : isParked ? "parked" : "failed",
+      buyer_lead_id: result.buyer_lead_id ?? null,
+      redirect_url: result.redirect_url ?? null,
+      ...(result.relay_error && !isParked ? { error: result.relay_error } : {}),
+      ...(isParked ? { message: "Lead received and queued — no buyer integration active yet" } : {}),
     });
   }
 

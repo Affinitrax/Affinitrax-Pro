@@ -140,11 +140,15 @@ export async function relayLead(
     .single();
 
   if (intErr || !integration) {
+    // No buyer integration yet — park the lead (safe in DB, replayable later)
     await admin
       .from("leads")
-      .update({ status: "failed", relay_error: "No active integration configured for this deal" })
+      .update({ status: "parked", relay_error: null })
       .eq("id", leadId);
-    return { success: false, relay_error: "No active integration configured for this deal" };
+    await logEvent(leadId, "inbound", "lead_parked", {
+      payload: { reason: "No active buyer integration for this deal" },
+    });
+    return { success: false, relay_error: "parked" };
   }
 
   // 2. Load field mappings

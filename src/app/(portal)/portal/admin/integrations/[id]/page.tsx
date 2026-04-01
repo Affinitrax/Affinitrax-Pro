@@ -84,6 +84,8 @@ export default function IntegrationDetailPage() {
   const [newKeyLabel, setNewKeyLabel] = useState("");
   const [newKeyResult, setNewKeyResult] = useState<string | null>(null);
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [parkedCount, setParkedCount] = useState<number | null>(null);
+  const [replaying, setReplaying] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -107,6 +109,10 @@ export default function IntegrationDetailPage() {
 
       const keysData: ApiKey[] = await fetch(`/api/admin/api-keys?deal_id=${intData.deal_id}`).then((r) => r.json());
       setApiKeys(Array.isArray(keysData) ? keysData : []);
+
+      // Count parked leads for this deal
+      const parkedRes = await fetch(`/api/admin/leads?deal_id=${intData.deal_id}&status=parked&limit=1`).then((r) => r.json());
+      setParkedCount(typeof parkedRes.total === "number" ? parkedRes.total : 0);
 
       setLoading(false);
     }
@@ -187,6 +193,20 @@ export default function IntegrationDetailPage() {
     setApiKeys((prev) => prev.map((k) => k.id === keyId ? { ...k, status: "revoked" as const } : k));
   }
 
+  async function replayParked() {
+    setReplaying(true);
+    setMsg(null);
+    const res = await fetch(`/api/admin/integrations/${id}/replay`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setMsg({ type: "ok", text: `Replay complete — ${data.replayed} relayed, ${data.failed} failed` });
+      setParkedCount(data.failed);
+    } else {
+      setMsg({ type: "err", text: data.error ?? "Replay failed" });
+    }
+    setReplaying(false);
+  }
+
   if (loading) {
     return (
       <main className="flex-1 p-8">
@@ -221,6 +241,28 @@ export default function IntegrationDetailPage() {
       {msg && (
         <div className={`px-4 py-3 rounded-lg text-sm ${msg.type === "ok" ? "bg-green-500/15 text-green-400 border border-green-500/30" : "bg-red-500/15 text-red-400 border border-red-500/30"}`}>
           {msg.text}
+        </div>
+      )}
+
+      {/* ── Parked leads banner ────────────────────────────────────────────── */}
+      {parkedCount !== null && parkedCount > 0 && (
+        <div className="flex items-center justify-between px-5 py-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+          <div>
+            <p className="text-amber-400 font-semibold text-sm">
+              {parkedCount} parked lead{parkedCount !== 1 ? "s" : ""} waiting
+            </p>
+            <p className="text-amber-400/70 text-xs mt-0.5">
+              These leads arrived before the buyer integration was active. Replay them now to forward to the CRM.
+            </p>
+          </div>
+          <button
+            onClick={replayParked}
+            disabled={replaying || integration?.status !== "active"}
+            className="ml-4 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 whitespace-nowrap"
+            style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)" }}
+          >
+            {replaying ? "Replaying…" : `Replay ${parkedCount} lead${parkedCount !== 1 ? "s" : ""}`}
+          </button>
         </div>
       )}
 
