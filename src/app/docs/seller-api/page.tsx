@@ -5,6 +5,7 @@ import CopyButton from "@/components/portal/CopyButton";
 export const metadata: Metadata = {
   title: "Seller API Reference — Affinitrax",
   description: "Complete API documentation for sellers integrating leads with Affinitrax.",
+  robots: { index: false, follow: false },
 };
 
 const BASE = "https://affinitrax.com";
@@ -25,7 +26,7 @@ const CURL_STATUS = `curl ${BASE}/api/v1/leads/LEAD_ID \\
   -H "X-API-Key: afx_YOUR_API_KEY"`;
 
 const RESPONSE_OK = `{
-  "id": "a3f1c2d4-...",
+  "lead_id": "a3f1c2d4-...",
   "status": "relayed",
   "buyer_lead_id": "12345",
   "redirect_url": null

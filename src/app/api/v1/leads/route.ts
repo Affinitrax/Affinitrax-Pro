@@ -99,6 +99,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Valid email is required" }, { status: 422 });
   }
 
+  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+  if (!phone) {
+    return NextResponse.json({ error: "phone is required" }, { status: 422 });
+  }
+
+  const countryRaw = typeof body.country === "string" ? body.country.trim() : "";
+  if (!countryRaw || !/^[A-Za-z]{2}$/.test(countryRaw)) {
+    return NextResponse.json({ error: "country is required (2-letter ISO code, e.g. DE)" }, { status: 422 });
+  }
+  const country = countryRaw.toUpperCase();
+
   const isTest = body.is_test === true;
 
   // ── Insert lead record ────────────────────────────────────────────────────
@@ -111,8 +122,8 @@ export async function POST(req: Request) {
       first_name: typeof body.first_name === "string" ? body.first_name : null,
       last_name: typeof body.last_name === "string" ? body.last_name : null,
       email,
-      phone: typeof body.phone === "string" ? body.phone : null,
-      country: typeof body.country === "string" && /^[A-Za-z]{2}$/.test(body.country.trim()) ? body.country.trim().toUpperCase() : null,
+      phone,
+      country,
       ip: typeof body.ip === "string" ? body.ip : ip,
       click_id: typeof body.click_id === "string" ? body.click_id : null,
       sub1: typeof body.sub1 === "string" ? body.sub1 : null,
@@ -150,8 +161,8 @@ export async function POST(req: Request) {
       email,
       first_name: typeof body.first_name === "string" ? body.first_name : undefined,
       last_name: typeof body.last_name === "string" ? body.last_name : undefined,
-      phone: typeof body.phone === "string" ? body.phone : undefined,
-      country: typeof body.country === "string" ? body.country : undefined,
+      phone,
+      country,
       ip: typeof body.ip === "string" ? body.ip : ip,
       click_id: typeof body.click_id === "string" ? body.click_id : undefined,
       sub1: typeof body.sub1 === "string" ? body.sub1 : undefined,
