@@ -1,5 +1,18 @@
 const TELEGRAM_API = "https://api.telegram.org";
 
+/**
+ * Escape user-supplied strings for Telegram HTML parse mode.
+ * Telegram only processes <b>, <i>, <a>, <code>, <pre> — but unescaped
+ * < > & can still break message formatting or be used for spoofing.
+ */
+function escapeTg(text: string | undefined | null): string {
+  if (!text) return "—";
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 // Send to the admin chat (uses TELEGRAM_CHAT_ID env)
 export async function sendTelegramMessage(text: string): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -64,15 +77,15 @@ export function formatInquiryMessage(inquiry: {
   return [
     `🔔 <b>New Inquiry — Affinitrax</b>`,
     ``,
-    `👤 <b>Name:</b> ${inquiry.name || "—"}`,
-    `📧 <b>Email:</b> ${inquiry.email}`,
-    `✈️ <b>Telegram:</b> ${tg}`,
-    `🏢 <b>Company:</b> ${inquiry.company || "—"}`,
-    `👥 <b>Role:</b> ${role}`,
-    `📊 <b>Vertical:</b> ${vertical}`,
+    `👤 <b>Name:</b> ${escapeTg(inquiry.name)}`,
+    `📧 <b>Email:</b> ${escapeTg(inquiry.email)}`,
+    `✈️ <b>Telegram:</b> ${escapeTg(tg)}`,
+    `🏢 <b>Company:</b> ${escapeTg(inquiry.company)}`,
+    `👥 <b>Role:</b> ${escapeTg(role)}`,
+    `📊 <b>Vertical:</b> ${escapeTg(vertical)}`,
     ``,
     `💬 <b>Message:</b>`,
-    inquiry.message || "—",
+    escapeTg(inquiry.message),
     ``,
     `<i>Reply target: 2 hours</i>`,
   ].join("\n");

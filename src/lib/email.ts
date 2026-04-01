@@ -2,13 +2,27 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// TODO: switch back to "Affinitrax <info@affinitrax.com>" once affinitrax.com domain is verified in Resend
 const FROM = process.env.RESEND_DOMAIN_VERIFIED?.trim() === "true"
   ? "Affinitrax <info@affinitrax.com>"
   : "Affinitrax <onboarding@resend.dev>";
 const NOTIFY_TO = "cryp70.ai@gmail.com";
 
+/**
+ * Escape user-supplied strings before embedding them in HTML email bodies.
+ * Prevents HTML/script injection in admin email clients.
+ */
+function esc(text: string | undefined | null): string {
+  if (!text) return "—";
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function sendPartnerInvite(email: string, inviteUrl: string): Promise<void> {
+  // inviteUrl is system-generated — no need to escape
   const { error } = await resend.emails.send({
     from: FROM,
     to: email,
@@ -55,16 +69,18 @@ export async function sendInquiryNotification(inquiry: {
   const vertical = inquiry.vertical
     ? inquiry.vertical.charAt(0).toUpperCase() + inquiry.vertical.slice(1)
     : "—";
-  const tg = inquiry.telegram
+  const tgRaw = inquiry.telegram
     ? (inquiry.telegram.startsWith("@") ? inquiry.telegram : `@${inquiry.telegram}`)
-    : "—";
+    : null;
+  const tgDisplay = esc(tgRaw);
+  const tgHandle = tgRaw ? tgRaw.replace("@", "") : "";
 
-  // Notify you
+  // Notify admin
   await resend.emails.send({
     from: FROM,
     to: NOTIFY_TO,
     replyTo: inquiry.email,
-    subject: `New Inquiry from ${inquiry.name || inquiry.email} — ${role} / ${vertical}`,
+    subject: `New Inquiry from ${esc(inquiry.name) || inquiry.email} — ${role} / ${vertical}`,
     html: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#080810;color:#e2e8f0;padding:32px;border-radius:12px;">
         <div style="margin-bottom:24px;">
@@ -72,16 +88,16 @@ export async function sendInquiryNotification(inquiry: {
           <p style="color:#94a3b8;font-size:12px;margin:4px 0 0;letter-spacing:2px;text-transform:uppercase;">New Inquiry</p>
         </div>
         <table style="width:100%;border-collapse:collapse;">
-          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;width:120px;">Name</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${inquiry.name || "—"}</td></tr>
-          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Email</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="mailto:${inquiry.email}" style="color:#00d4ff;">${inquiry.email}</a></td></tr>
-          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Telegram</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="https://t.me/${tg.replace('@','')}" style="color:#00d4ff;">${tg}</a></td></tr>
-          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Company</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${inquiry.company || "—"}</td></tr>
-          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Role</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${role}</td></tr>
-          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Vertical</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${vertical}</td></tr>
+          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;width:120px;">Name</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(inquiry.name)}</td></tr>
+          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Email</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="mailto:${esc(inquiry.email)}" style="color:#00d4ff;">${esc(inquiry.email)}</a></td></tr>
+          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Telegram</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${tgHandle ? `<a href="https://t.me/${esc(tgHandle)}" style="color:#00d4ff;">${tgDisplay}</a>` : "—"}</td></tr>
+          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Company</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(inquiry.company)}</td></tr>
+          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Role</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(role)}</td></tr>
+          <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Vertical</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(vertical)}</td></tr>
         </table>
         <div style="margin-top:24px;">
           <p style="color:#94a3b8;margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Message</p>
-          <p style="background:#0e0e1a;border:1px solid #1e293b;border-radius:8px;padding:16px;margin:0;line-height:1.6;">${inquiry.message || "—"}</p>
+          <p style="background:#0e0e1a;border:1px solid #1e293b;border-radius:8px;padding:16px;margin:0;line-height:1.6;white-space:pre-wrap;">${esc(inquiry.message)}</p>
         </div>
         <p style="margin-top:24px;color:#475569;font-size:12px;">Reply target: 2 hours · Affinitrax Partner Platform</p>
       </div>
@@ -100,7 +116,7 @@ export async function sendInquiryNotification(inquiry: {
           <span style="font-size:22px;font-weight:700;background:linear-gradient(135deg,#00d4ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Affinitrax</span>
           <p style="color:#94a3b8;font-size:12px;margin:4px 0 0;letter-spacing:2px;text-transform:uppercase;">All Signal. No Noise.</p>
         </div>
-        <h2 style="margin:0 0 16px;font-size:20px;">We got your brief${inquiry.name ? `, ${inquiry.name.split(' ')[0]}` : ''}.</h2>
+        <h2 style="margin:0 0 16px;font-size:20px;">We got your brief${inquiry.name ? `, ${esc(inquiry.name.split(" ")[0])}` : ""}.</h2>
         <p style="color:#94a3b8;line-height:1.7;margin:0 0 24px;">
           Our team reviews every inquiry personally. You'll hear back within 2 hours on business days — usually faster on Telegram.
         </p>

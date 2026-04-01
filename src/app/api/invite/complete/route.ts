@@ -1,7 +1,22 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
+  // ── Rate limit: 5 attempts per IP per 15 minutes ──────────────────────
+  const ip = getClientIp(req);
+  const rl = rateLimit(`invite-complete:${ip}`, 5, 15 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+      }
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const { token, password } = await req.json() as { token: string; password: string };
 
   if (!token || !password) {
@@ -45,7 +60,7 @@ export async function POST(req: Request) {
   const { data: created, error: createError } = await admin.auth.admin.createUser({
     email: invite.email,
     password,
-    email_confirm: true, // skip confirmation entirely — email verified via invite token
+    email_confirm: true,
   });
 
   if (createError || !created?.user) {

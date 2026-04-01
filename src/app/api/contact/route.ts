@@ -2,8 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendTelegramMessage, formatInquiryMessage } from "@/lib/telegram";
 import { sendInquiryNotification } from "@/lib/email";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+  // ── Rate limit: 5 submissions per IP per hour ─────────────────────────
+  const ip = getClientIp(request);
+  const rl = rateLimit(`contact:${ip}`, 5, 60 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+      }
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     const body = await request.json();
     const { name, email, company, telegram, type, vertical, message } = body;

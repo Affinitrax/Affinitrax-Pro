@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { Resend } from "resend";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM =
@@ -10,7 +11,41 @@ const FROM =
     : "Affinitrax <onboarding@resend.dev>";
 const NOTIFY_TO = "cryp70.ai@gmail.com";
 
+/** Escape user-supplied strings before embedding in HTML email bodies. */
+function esc(text: string | undefined | null): string {
+  if (!text) return "—";
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Escape for Telegram HTML parse mode. */
+function escapeTg(text: string | undefined | null): string {
+  if (!text) return "—";
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export async function POST(request: NextRequest) {
+  // ── Rate limit: 5 submissions per IP per hour ─────────────────────────
+  const ip = getClientIp(request);
+  const rl = rateLimit(`apply:${ip}`, 5, 60 * 60 * 1000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) },
+      }
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     const body = await request.json();
     const {
@@ -60,7 +95,7 @@ export async function POST(request: NextRequest) {
       ? telegram.startsWith("@") ? telegram : `@${telegram}`
       : "—";
 
-    // ── Save to Supabase (inquiries table, type = application) ──────────
+    // ── Save to Supabase ──────────────────────────────────────────────────
     const supabase = await createClient();
     const messageText = [
       `Role: ${roleLabel}`,
@@ -87,26 +122,26 @@ export async function POST(request: NextRequest) {
       utm_source: request.nextUrl.searchParams.get("utm_source"),
     });
 
-    // ── Telegram notification ────────────────────────────────────────────
+    // ── Telegram notification ─────────────────────────────────────────────
     const tgMessage = [
       `🎯 <b>New Portal Application — Affinitrax</b>`,
       ``,
-      `👤 <b>Name:</b> ${name}`,
-      `📧 <b>Email:</b> ${email}`,
-      `🏢 <b>Company:</b> ${company}`,
-      website ? `🌐 <b>Website:</b> ${website}` : null,
-      `✈️ <b>Telegram:</b> ${tg}`,
+      `👤 <b>Name:</b> ${escapeTg(name)}`,
+      `📧 <b>Email:</b> ${escapeTg(email)}`,
+      `🏢 <b>Company:</b> ${escapeTg(company)}`,
+      website ? `🌐 <b>Website:</b> ${escapeTg(website)}` : null,
+      `✈️ <b>Telegram:</b> ${escapeTg(tg)}`,
       ``,
-      `👥 <b>Role:</b> ${roleLabel}`,
-      `📊 <b>Verticals:</b> ${verticals || "—"}`,
-      `💰 <b>Monthly Volume:</b> ${volumeLabel}`,
-      `📡 <b>Traffic Sources:</b> ${trafficSources || "—"}`,
-      `🤝 <b>Previous Networks:</b> ${previousNetworks || "—"}`,
+      `👥 <b>Role:</b> ${escapeTg(roleLabel)}`,
+      `📊 <b>Verticals:</b> ${escapeTg(verticals)}`,
+      `💰 <b>Monthly Volume:</b> ${escapeTg(volumeLabel)}`,
+      `📡 <b>Traffic Sources:</b> ${escapeTg(trafficSources)}`,
+      `🤝 <b>Previous Networks:</b> ${escapeTg(previousNetworks)}`,
       ``,
       `📋 <b>References:</b>`,
-      `  1. ${ref1Name || "—"} — ${ref1Contact || "—"}`,
-      ref2Name ? `  2. ${ref2Name} — ${ref2Contact || "—"}` : null,
-      notes ? `\n💬 <b>Notes:</b>\n${notes}` : null,
+      `  1. ${escapeTg(ref1Name)} — ${escapeTg(ref1Contact)}`,
+      ref2Name ? `  2. ${escapeTg(ref2Name)} — ${escapeTg(ref2Contact)}` : null,
+      notes ? `\n💬 <b>Notes:</b>\n${escapeTg(notes)}` : null,
       ``,
       `<i>Review within 48 hours · Affinitrax Partner Portal</i>`,
     ]
@@ -117,13 +152,13 @@ export async function POST(request: NextRequest) {
       console.error("[Telegram] Application notification error:", err)
     );
 
-    // ── Admin email notification ─────────────────────────────────────────
+    // ── Admin email notification ──────────────────────────────────────────
     resend.emails
       .send({
         from: FROM,
         to: NOTIFY_TO,
         replyTo: email,
-        subject: `New Portal Application — ${name} / ${company} (${roleLabel})`,
+        subject: `New Portal Application — ${esc(name)} / ${esc(company)} (${esc(roleLabel)})`,
         html: `
         <div style="font-family:sans-serif;max-width:640px;margin:0 auto;background:#080810;color:#e2e8f0;padding:32px;border-radius:12px;">
           <div style="margin-bottom:24px;">
@@ -131,23 +166,23 @@ export async function POST(request: NextRequest) {
             <p style="color:#94a3b8;font-size:12px;margin:4px 0 0;letter-spacing:2px;text-transform:uppercase;">New Portal Application</p>
           </div>
           <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;width:140px;">Name</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${name}</td></tr>
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Email</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="mailto:${email}" style="color:#00d4ff;">${email}</a></td></tr>
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Company</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${company}</td></tr>
-            ${website ? `<tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Website</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="${website}" style="color:#00d4ff;">${website}</a></td></tr>` : ""}
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Telegram</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="https://t.me/${tg.replace("@", "")}" style="color:#00d4ff;">${tg}</a></td></tr>
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Role</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${roleLabel}</td></tr>
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Verticals</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${verticals || "—"}</td></tr>
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Monthly Volume</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${volumeLabel}</td></tr>
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Traffic Sources</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${trafficSources || "—"}</td></tr>
-            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Prev. Networks</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${previousNetworks || "—"}</td></tr>
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;width:140px;">Name</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(name)}</td></tr>
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Email</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="mailto:${esc(email)}" style="color:#00d4ff;">${esc(email)}</a></td></tr>
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Company</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(company)}</td></tr>
+            ${website ? `<tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Website</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(website)}</td></tr>` : ""}
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Telegram</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;"><a href="https://t.me/${esc(tg.replace("@", ""))}" style="color:#00d4ff;">${esc(tg)}</a></td></tr>
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Role</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(roleLabel)}</td></tr>
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Verticals</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(verticals)}</td></tr>
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Monthly Volume</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(volumeLabel)}</td></tr>
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Traffic Sources</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(trafficSources)}</td></tr>
+            <tr><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;color:#94a3b8;">Prev. Networks</td><td style="padding:10px 0;border-bottom:1px solid #1e1e2e;">${esc(previousNetworks)}</td></tr>
           </table>
           <div style="background:#0e0e1a;border:1px solid #1e293b;border-radius:8px;padding:16px;margin-bottom:16px;">
             <p style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;">References</p>
-            <p style="margin:0 0 6px;font-size:13px;">1. <strong>${ref1Name || "—"}</strong> — ${ref1Contact || "—"}</p>
-            ${ref2Name ? `<p style="margin:0;font-size:13px;">2. <strong>${ref2Name}</strong> — ${ref2Contact || "—"}</p>` : ""}
+            <p style="margin:0 0 6px;font-size:13px;">1. <strong>${esc(ref1Name)}</strong> — ${esc(ref1Contact)}</p>
+            ${ref2Name ? `<p style="margin:0;font-size:13px;">2. <strong>${esc(ref2Name)}</strong> — ${esc(ref2Contact)}</p>` : ""}
           </div>
-          ${notes ? `<div style="background:#0e0e1a;border:1px solid #1e293b;border-radius:8px;padding:16px;"><p style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px;">Notes</p><p style="margin:0;line-height:1.6;font-size:13px;">${notes}</p></div>` : ""}
+          ${notes ? `<div style="background:#0e0e1a;border:1px solid #1e293b;border-radius:8px;padding:16px;"><p style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px;">Notes</p><p style="margin:0;line-height:1.6;font-size:13px;white-space:pre-wrap;">${esc(notes)}</p></div>` : ""}
           <p style="margin-top:24px;color:#334155;font-size:12px;border-top:1px solid #1e293b;padding-top:16px;">
             Affinitrax · Partner Portal Application · <a href="https://affinitrax.com" style="color:#475569;">affinitrax.com</a>
           </p>
@@ -156,7 +191,7 @@ export async function POST(request: NextRequest) {
       })
       .catch((err) => console.error("[Resend] Application email error:", err));
 
-    // ── Confirmation email to applicant ──────────────────────────────────
+    // ── Confirmation email to applicant ───────────────────────────────────
     resend.emails
       .send({
         from: FROM,
@@ -169,7 +204,7 @@ export async function POST(request: NextRequest) {
             <span style="font-size:22px;font-weight:700;background:linear-gradient(135deg,#00d4ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Affinitrax</span>
             <p style="color:#94a3b8;font-size:12px;margin:4px 0 0;letter-spacing:2px;text-transform:uppercase;">Partner Portal</p>
           </div>
-          <h2 style="margin:0 0 16px;font-size:20px;">Application received${name ? `, ${name.split(" ")[0]}` : ""}.</h2>
+          <h2 style="margin:0 0 16px;font-size:20px;">Application received${name ? `, ${esc(name.split(" ")[0])}` : ""}.</h2>
           <p style="color:#94a3b8;line-height:1.7;margin:0 0 16px;">
             We've received your application for the Affinitrax Partner Portal and will review it manually within 48 hours.
           </p>

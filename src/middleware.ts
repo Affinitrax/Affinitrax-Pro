@@ -30,21 +30,23 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+
   const isAuthPage =
     pathname.startsWith("/portal/login") ||
     pathname.startsWith("/portal/signup") ||
     pathname.startsWith("/portal/forgot-password") ||
     pathname.startsWith("/portal/reset-password");
   const isPendingPage = pathname.startsWith("/portal/pending");
+  const isAdminRoute = pathname.startsWith("/portal/admin");
 
-  // Unauthenticated: redirect to login
+  // ── Unauthenticated: redirect to login ───────────────────────────────────
   if (!user && pathname.startsWith("/portal") && !isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/portal/login";
     return NextResponse.redirect(url);
   }
 
-  // Authenticated: check profile status (skip for auth pages and pending page)
+  // ── Authenticated: check profile status and role ─────────────────────────
   if (user && pathname.startsWith("/portal") && !isAuthPage && !isPendingPage) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -52,13 +54,22 @@ export async function middleware(request: NextRequest) {
       .eq("id", user.id)
       .single();
 
-    // Admins always pass through
-    if (profile?.role !== "admin") {
+    const isAdmin = profile?.role === "admin";
+
+    // Non-admin partners with pending/suspended status go to holding page
+    if (!isAdmin) {
       if (profile?.status === "pending" || profile?.status === "suspended") {
         const url = request.nextUrl.clone();
         url.pathname = "/portal/pending";
         return NextResponse.redirect(url);
       }
+    }
+
+    // ── Admin route protection: only admins may access /portal/admin/* ──────
+    if (isAdminRoute && !isAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/portal/dashboard";
+      return NextResponse.redirect(url);
     }
   }
 
