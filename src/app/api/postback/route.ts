@@ -66,9 +66,7 @@ async function handlePostback(request: NextRequest): Promise<Response> {
     }
 
     /** Get a param preferring URL query string over body */
-    function getParam(key: string): string | null {
-      return searchParams.get(key) ?? bodyParams.get(key);
-    }
+    const getParam = (key: string): string | null => searchParams.get(key) ?? bodyParams.get(key);
 
     const deal_id = getParam("deal_id");
     const click_id = getParam("click_id");
