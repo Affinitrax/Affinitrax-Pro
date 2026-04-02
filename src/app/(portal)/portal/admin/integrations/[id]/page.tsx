@@ -16,6 +16,7 @@ type Integration = {
   response_lead_id_path: string;
   response_redirect_url_path: string | null;
   ip_whitelist_required: boolean;
+  allowed_ips: string[] | null;
   notes: string | null;
   status: "active" | "inactive" | "testing";
   mappings: FieldMapping[];
@@ -102,6 +103,7 @@ export default function IntegrationDetailPage() {
         response_lead_id_path: intData.response_lead_id_path,
         response_redirect_url_path: intData.response_redirect_url_path ?? "",
         ip_whitelist_required: intData.ip_whitelist_required,
+        allowed_ips: intData.allowed_ips ?? null,
         notes: intData.notes ?? "",
         status: intData.status,
       });
@@ -344,6 +346,38 @@ export default function IntegrationDetailPage() {
               rows={2}
               className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 resize-none"
             />
+          </div>
+
+          {/* ── Buyer IP Whitelist ──────────────────────────────────────────── */}
+          <div className="md:col-span-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-[#94a3b8]">
+                Buyer IP Whitelist
+                <span className="ml-2 text-[#334155]">— only these IPs can fire postbacks for this deal</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <span className="text-xs text-[#475569]">Enforce</span>
+                <div
+                  onClick={() => setForm((f) => ({ ...f, ip_whitelist_required: !f.ip_whitelist_required }))}
+                  className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${form.ip_whitelist_required ? "bg-[#00d4ff]/80" : "bg-white/10"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.ip_whitelist_required ? "translate-x-4" : "translate-x-0"}`} />
+                </div>
+              </label>
+            </div>
+            <textarea
+              value={(form.allowed_ips ?? []).join("\n")}
+              onChange={(e) => {
+                const lines = e.target.value.split("\n").map((l) => l.trim()).filter(Boolean);
+                setForm((f) => ({ ...f, allowed_ips: lines.length > 0 ? lines : null }));
+              }}
+              rows={3}
+              placeholder={"One IP per line, e.g.\n185.220.101.47\n194.165.16.11"}
+              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 resize-none font-mono placeholder:text-[#334155]"
+            />
+            {form.ip_whitelist_required && (!form.allowed_ips || form.allowed_ips.length === 0) && (
+              <p className="text-amber-400 text-xs mt-1">⚠ Enforcement is on but no IPs are listed — all postbacks will be blocked.</p>
+            )}
           </div>
         </div>
 

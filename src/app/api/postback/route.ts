@@ -58,6 +58,36 @@ async function handlePostback(request: NextRequest): Promise<Response> {
       return new Response("OK", { status: 200 });
     }
 
+    // ── Buyer IP whitelist check ───────────────────────────────────────────
+    // If the deal's integration has ip_whitelist_required = true, verify the
+    // incoming IP is in the allowed_ips list. Reject silently if not.
+    const supabaseForCheck = createAdminClient();
+    const { data: integration } = await supabaseForCheck
+      .from("deal_integrations")
+      .select("ip_whitelist_required, allowed_ips")
+      .eq("deal_id", deal_id)
+      .eq("status", "active")
+      .single();
+
+    if (integration?.ip_whitelist_required) {
+      const allowedIps: string[] = integration.allowed_ips ?? [];
+      if (allowedIps.length > 0 && !allowedIps.includes(ip)) {
+        // Log the blocked attempt for audit
+        await supabaseForCheck.from("postback_events").insert({
+          deal_id,
+          click_id,
+          event_type: "ip_blocked",
+          ip_address: ip,
+          raw_params: {
+            ...Object.fromEntries(searchParams),
+            _fraud_reason: "ip_not_whitelisted",
+            _allowed_ips: allowedIps,
+          },
+        });
+        return new Response("OK", { status: 200 });
+      }
+    }
+
     // Validate event_type
     const validEventTypes = ["click", "lead", "conversion", "rejection", "ftd", "deposit", "registration"];
     const safeEventType = validEventTypes.includes(event_type) ? event_type : "conversion";

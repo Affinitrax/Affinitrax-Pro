@@ -29,7 +29,7 @@ export async function GET(
 
   const { data: integration } = await admin
     .from("deal_integrations")
-    .select("id, deal_id, name, endpoint_url, auth_type, auth_header_name, content_type, response_lead_id_path, response_redirect_url_path, ip_whitelist_required, notes, status, created_at, updated_at")
+    .select("id, deal_id, name, endpoint_url, auth_type, auth_header_name, content_type, response_lead_id_path, response_redirect_url_path, ip_whitelist_required, allowed_ips, notes, status, created_at, updated_at")
     .eq("id", id)
     .single();
 
@@ -60,7 +60,7 @@ export async function PATCH(
   const allowed = [
     "name", "endpoint_url", "auth_type", "auth_header_name",
     "content_type", "response_lead_id_path", "response_redirect_url_path",
-    "ip_whitelist_required", "notes", "status",
+    "ip_whitelist_required", "allowed_ips", "notes", "status",
   ];
 
   for (const key of allowed) {
