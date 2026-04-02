@@ -45,12 +45,12 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // Fire Telegram notification — non-blocking
-    sendTelegramMessage(
+    // Await Telegram — must complete before returning or Vercel kills the function
+    await sendTelegramMessage(
       formatInquiryMessage({ name, email, company, telegram, type, vertical, message })
     ).catch((err) => console.error("[Telegram] Notification error:", err));
 
-    // Fire email notifications — non-blocking
+    // Fire email notification — non-blocking is fine (slower, non-critical)
     sendInquiryNotification({ name, email, company, telegram, type, vertical, message })
       .catch((err) => console.error("[Resend] Email notification error:", err));
 

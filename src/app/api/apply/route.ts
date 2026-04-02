@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
       .filter((l) => l !== null)
       .join("\n");
 
-    sendTelegramMessage(tgMessage).catch((err) =>
+    await sendTelegramMessage(tgMessage).catch((err) =>
       console.error("[Telegram] Application notification error:", err)
     );
 
