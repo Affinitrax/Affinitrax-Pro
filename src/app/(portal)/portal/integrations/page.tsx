@@ -109,6 +109,7 @@ export default async function IntegrationsPage() {
     }
 
     // Leads received in last 24 hours — exclude test leads for accurate stats
+    // eslint-disable-next-line react-hooks/purity
     const since = new Date(Date.now() - 86400000).toISOString();
     const { data: recentLeads } = await admin
       .from("leads")
