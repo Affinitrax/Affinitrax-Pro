@@ -1,9 +1,47 @@
+/**
+ * GET|POST /api/postback
+ *
+ * Buyer-facing conversion postback endpoint.
+ * Called by buyers when a lead converts (FTD, deposit, etc.).
+ * Logs the event, updates lead status, fires seller postback relays.
+ *
+ * Query/body params:
+ *   deal_id     uuid    required
+ *   click_id    string  optional  matches lead for relay
+ *   event_type  string  optional  default "conversion"
+ *   sub_id      string  optional
+ *   geo         string  optional  ISO-2
+ *   revenue     float   optional  buyer-reported revenue
+ *   payout      float   optional  seller payout amount
+ *
+ * Security hardening:
+ *   - Rate limited: 200 postbacks/IP/min
+ *   - Duplicate conversion protection: (click_id, event_type) deduped for
+ *     ftd/deposit/conversion — same event cannot be replayed to double-pay
+ *   - Revenue/payout capped at sane maximums to prevent spoofed inflation
+ */
+
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPartnerNotification } from "@/lib/telegram";
 import { firePostback } from "@/lib/integration/postback-relay";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
+
+/** Conversion-type events that must be deduplicated per click_id */
+const DEDUP_EVENT_TYPES = new Set(["ftd", "deposit", "conversion"]);
+
+/** Maximum sane revenue/payout values to prevent spoofed inflation */
+const MAX_REVENUE = 100_000;
 
 async function handlePostback(request: NextRequest): Promise<Response> {
+  // ── Rate limit: 200 postbacks per IP per minute ───────────────────────────
+  const ip = getClientIp(request);
+  const rl = rateLimit(`postback:${ip}`, 200, 60_000);
+  if (!rl.allowed) {
+    // Always return 200 — never expose internals to buyers
+    return new Response("OK", { status: 200 });
+  }
+
   try {
     const searchParams = request.nextUrl.searchParams;
 
@@ -22,9 +60,47 @@ async function handlePostback(request: NextRequest): Promise<Response> {
 
     // Validate event_type
     const validEventTypes = ["click", "lead", "conversion", "rejection", "ftd", "deposit", "registration"];
-    const safeEventType = validEventTypes.includes(event_type)
-      ? event_type
-      : "conversion";
+    const safeEventType = validEventTypes.includes(event_type) ? event_type : "conversion";
+
+    // Sanitize revenue/payout — cap at maximum to prevent spoofed inflation
+    const safeRevenue = revenue && isFinite(parseFloat(revenue))
+      ? Math.min(parseFloat(revenue), MAX_REVENUE)
+      : null;
+    const safePayout = payout && isFinite(parseFloat(payout))
+      ? Math.min(parseFloat(payout), MAX_REVENUE)
+      : null;
+
+    const supabase = createAdminClient();
+
+    // ── Duplicate conversion protection ───────────────────────────────────
+    // For FTD/deposit/conversion events: if we already have this (click_id, event_type)
+    // pair recorded, reject the replay silently — prevents double-payout fraud.
+    if (click_id && DEDUP_EVENT_TYPES.has(safeEventType)) {
+      const { count: existingCount } = await supabase
+        .from("postback_events")
+        .select("id", { count: "exact", head: true })
+        .eq("deal_id", deal_id)
+        .eq("click_id", click_id)
+        .eq("event_type", safeEventType);
+
+      if ((existingCount ?? 0) > 0) {
+        // Duplicate detected — log it as a separate fraud event but return 200
+        await supabase.from("postback_events").insert({
+          deal_id,
+          click_id,
+          event_type: "duplicate_rejected",
+          sub_id,
+          geo,
+          ip_address: ip,
+          raw_params: {
+            ...Object.fromEntries(searchParams),
+            _original_event: safeEventType,
+            _fraud_reason: "duplicate_conversion_replay",
+          },
+        });
+        return new Response("OK", { status: 200 });
+      }
+    }
 
     // Collect all raw params for audit trail
     const rawParams: Record<string, string> = {};
@@ -32,19 +108,15 @@ async function handlePostback(request: NextRequest): Promise<Response> {
       rawParams[key] = value;
     });
 
-    const supabase = createAdminClient();
-
     const { error } = await supabase.from("postback_events").insert({
       deal_id,
       click_id,
       event_type: safeEventType,
       sub_id,
       geo,
-      ip_address:
-        request.headers.get("x-forwarded-for") ||
-        request.headers.get("x-real-ip"),
-      revenue: revenue && isFinite(parseFloat(revenue)) ? parseFloat(revenue) : null,
-      payout: payout && isFinite(parseFloat(payout)) ? parseFloat(payout) : null,
+      ip_address: ip,
+      revenue: safeRevenue,
+      payout: safePayout,
       raw_params: rawParams,
     });
 
@@ -53,7 +125,7 @@ async function handlePostback(request: NextRequest): Promise<Response> {
     }
 
     // Fire Telegram notification for FTD-type events
-    if (!error && ["ftd", "conversion", "deposit"].includes(safeEventType)) {
+    if (!error && DEDUP_EVENT_TYPES.has(safeEventType)) {
       const admin = createAdminClient();
       const { data: deal } = await admin
         .from("deals")
@@ -69,7 +141,7 @@ async function handlePostback(request: NextRequest): Promise<Response> {
           .single();
 
         if (owner?.telegram_chat_id && owner.telegram_notifications) {
-          const revenueStr = revenue ? ` · $${parseFloat(revenue).toFixed(2)}` : "";
+          const revenueStr = safeRevenue ? ` · $${safeRevenue.toFixed(2)}` : "";
           const geoStr = geo ? ` · ${geo.toUpperCase()}` : "";
           await sendPartnerNotification(
             owner.telegram_chat_id,
@@ -80,7 +152,6 @@ async function handlePostback(request: NextRequest): Promise<Response> {
     }
 
     // ── Fire seller postback relays for this event ────────────────────────
-    // Map the buyer-sent event to our lead system and forward to seller tracker
     const eventTypeMap: Record<string, string> = {
       ftd: "ftd",
       deposit: "deposit",
@@ -106,7 +177,7 @@ async function handlePostback(request: NextRequest): Promise<Response> {
 
         if (lead) {
           // Update FTD timestamp if applicable
-          if (["ftd", "deposit", "conversion"].includes(safeEventType)) {
+          if (DEDUP_EVENT_TYPES.has(safeEventType)) {
             await admin2
               .from("leads")
               .update({ status: "ftd", ftd_at: new Date().toISOString() })
@@ -156,7 +227,6 @@ async function handlePostback(request: NextRequest): Promise<Response> {
     return new Response("OK", { status: 200 });
   } catch (err) {
     console.error("Postback error:", err);
-    // Never return error to buyer
     return new Response("OK", { status: 200 });
   }
 }
@@ -165,7 +235,6 @@ export async function GET(request: NextRequest): Promise<Response> {
   return handlePostback(request);
 }
 
-// Also accept POST postbacks
 export async function POST(request: NextRequest): Promise<Response> {
   return handlePostback(request);
 }
