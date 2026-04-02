@@ -96,8 +96,7 @@ export async function POST(req: Request) {
     .from("deal_api_keys")
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", apiKey.id)
-    .then(() => {})
-    .catch(() => {});
+    .then(() => {}, () => {});
 
   // ── Validate deal status + enforce daily cap ──────────────────────────────
   const { data: deal } = await admin
