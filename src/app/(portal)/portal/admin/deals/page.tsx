@@ -14,6 +14,7 @@ type Deal = {
   status: string | null;
   notes: string | null;
   admin_notes: string | null;
+  intake_method: "tracking_link" | "s2s_api" | null;
   created_at: string | null;
   requester_id: string;
   partner_email?: string;
@@ -36,6 +37,7 @@ function AdminDealRow({ deal, onUpdated }: { deal: Deal; onUpdated: () => void }
   const [expanded, setExpanded] = useState(false);
   const [adminNotes, setAdminNotes] = useState(deal.admin_notes ?? "");
   const [rateUsd, setRateUsd] = useState(deal.rate_usd != null ? String(deal.rate_usd) : "");
+  const [intakeMethod, setIntakeMethod] = useState<"tracking_link" | "s2s_api" | "">(deal.intake_method ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +62,7 @@ function AdminDealRow({ deal, onUpdated }: { deal: Deal; onUpdated: () => void }
     setError(null);
     const body: Record<string, unknown> = { admin_notes: adminNotes };
     if (rateUsd !== "") body.rate_usd = parseFloat(rateUsd);
+    body.intake_method = intakeMethod === "" ? null : intakeMethod;
     const res = await fetch(`/api/admin/deals/${deal.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -151,6 +154,34 @@ function AdminDealRow({ deal, onUpdated }: { deal: Deal; onUpdated: () => void }
                   <p className="text-xs text-[#475569] line-clamp-2">{deal.notes ?? "—"}</p>
                 </div>
               </div>
+
+              {/* Intake method — only relevant for sell deals */}
+              {deal.type !== "buy" && (
+                <div>
+                  <label className="text-xs text-[#475569] uppercase tracking-widest block mb-1">Intake Method</label>
+                  <div className="flex gap-2">
+                    {[
+                      { value: "", label: "Not set", desc: "Both shown" },
+                      { value: "tracking_link", label: "Tracking Link", desc: "Redirect-based" },
+                      { value: "s2s_api", label: "S2S API", desc: "Server POST" },
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setIntakeMethod(opt.value as typeof intakeMethod)}
+                        className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium text-left transition-colors border ${
+                          intakeMethod === opt.value
+                            ? "border-[#00d4ff]/50 bg-[#00d4ff]/10 text-[#00d4ff]"
+                            : "border-white/10 text-[#475569] hover:border-white/25 hover:text-[#94a3b8]"
+                        }`}
+                      >
+                        <div className="font-semibold">{opt.label}</div>
+                        <div className="text-[10px] opacity-70 mt-0.5">{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-xs text-[#475569] uppercase tracking-widest block mb-1">Admin Notes (internal)</label>

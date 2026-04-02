@@ -14,7 +14,7 @@ export async function GET() {
 
   const { data: deals } = await admin
     .from("deals")
-    .select("id, vertical, type, geos, model, volume_daily, budget_usd, rate_usd, status, notes, admin_notes, created_at, requester_id")
+    .select("id, vertical, type, geos, model, volume_daily, budget_usd, rate_usd, status, notes, admin_notes, intake_method, created_at, requester_id")
     .order("created_at", { ascending: false });
 
   if (!deals || deals.length === 0) return NextResponse.json([]);

@@ -16,6 +16,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     status?: string;
     admin_notes?: string;
     rate_usd?: number;
+    intake_method?: "tracking_link" | "s2s_api" | null;
   };
 
   const admin = createAdminClient();
@@ -33,6 +34,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.status !== undefined) update.status = body.status;
   if (body.admin_notes !== undefined) update.admin_notes = body.admin_notes;
   if (body.rate_usd !== undefined) update.rate_usd = body.rate_usd;
+  if ("intake_method" in body) update.intake_method = body.intake_method ?? null;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });

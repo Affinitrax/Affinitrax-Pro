@@ -28,6 +28,7 @@ type Deal = {
   status: string | null;
   notes: string | null;
   test_mode: boolean;
+  intake_method: "tracking_link" | "s2s_api" | null;
 };
 
 const STEPS = [
@@ -79,7 +80,7 @@ export default async function IntegrationsPage() {
 
   const { data: deals } = await supabase
     .from("deals")
-    .select("id, vertical, type, geos, model, status, notes, test_mode")
+    .select("id, vertical, type, geos, model, status, notes, test_mode, intake_method")
     .eq("requester_id", user.id)
     .not("status", "eq", "cancelled")
     .order("created_at", { ascending: false });
@@ -361,37 +362,65 @@ export default async function IntegrationsPage() {
                       </div>
                     )}
 
-                    {/* Tracking Link — sell deals */}
-                    {deal.type !== "buy" && (
-                      <div className="rounded-xl border border-white/7 overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-white/3 border-b border-white/7">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-[#00d4ff]" />
-                            <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Your Tracking Link</span>
+                    {/* ── Sell deal intake — shown based on intake_method ── */}
+                    {deal.type !== "buy" && (() => {
+                      const m = deal.intake_method;
+
+                      const trackingLinkBlock = (
+                        <div className="rounded-xl border border-white/7 overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-white/3 border-b border-white/7">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-[#00d4ff]" />
+                              <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Your Tracking Link</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-[#334155]">Send all traffic through this</span>
+                              <CopyButton text={`${BASE_URL}/api/track?deal_id=${deal.id}&seller_id=SELLER_ID&click_id={clickid}&sub_id={subid}&geo={geo}`} />
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-[#334155]">Send all traffic through this</span>
-                            <CopyButton text={`${BASE_URL}/api/track?deal_id=${deal.id}&seller_id=SELLER_ID&click_id={clickid}&sub_id={subid}&geo={geo}`} />
+                          <pre className="px-4 py-3 text-xs text-[#00d4ff] overflow-x-auto" style={{ fontFamily: "var(--font-mono)" }}>
+                            {`${BASE_URL}/api/track?deal_id=${deal.id}&seller_id=SELLER_ID&click_id={clickid}&sub_id={subid}&geo={geo}`}
+                          </pre>
+                          <div className="px-4 py-2.5 border-t border-white/5 bg-white/2 text-xs text-[#334155]">
+                            Replace <code className="text-[#475569]">SELLER_ID</code> with your name or label.
+                            Swap <code className="text-[#475569]">{"{clickid}"}</code> and <code className="text-[#475569]">{"{subid}"}</code> for your platform macros.
                           </div>
                         </div>
-                        <pre className="px-4 py-3 text-xs text-[#00d4ff] overflow-x-auto" style={{ fontFamily: "var(--font-mono)" }}>
-                          {`${BASE_URL}/api/track?deal_id=${deal.id}&seller_id=SELLER_ID&click_id={clickid}&sub_id={subid}&geo={geo}`}
-                        </pre>
-                        <div className="px-4 py-2.5 border-t border-white/5 bg-white/2 text-xs text-[#334155]">
-                          Replace <code className="text-[#475569]">SELLER_ID</code> with your name or label.
-                          Swap <code className="text-[#475569]">{"{clickid}"}</code> and <code className="text-[#475569]">{"{subid}"}</code> for your platform macros.
-                        </div>
-                      </div>
-                    )}
+                      );
+
+                      const apiKeyBlock = (
+                        <PartnerApiKeys dealId={deal.id} />
+                      );
+
+                      if (m === "tracking_link") {
+                        return trackingLinkBlock;
+                      }
+
+                      if (m === "s2s_api") {
+                        return apiKeyBlock;
+                      }
+
+                      // null — intake method not yet decided by admin
+                      return (
+                        <>
+                          <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-[#00d4ff]/15 bg-[#00d4ff]/[0.04]">
+                            <svg className="w-4 h-4 text-[#00d4ff] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                            </svg>
+                            <p className="text-xs text-[#94a3b8] leading-relaxed">
+                              <span className="font-semibold text-[#00d4ff]">Intake method not confirmed.</span>{" "}
+                              Both options are shown below. Your account manager will confirm which one to use — tracking link for redirect-based traffic, or S2S API for server-to-server posting.
+                            </p>
+                          </div>
+                          {trackingLinkBlock}
+                          {apiKeyBlock}
+                        </>
+                      );
+                    })()}
 
                     {/* Test Mode toggle — sell deals */}
                     {deal.type !== "buy" && (
                       <TestModeToggle dealId={deal.id} initialTestMode={deal.test_mode} />
-                    )}
-
-                    {/* API Keys — sell deals */}
-                    {deal.type !== "buy" && (
-                      <PartnerApiKeys dealId={deal.id} />
                     )}
 
                     {/* Postback config — sell deals */}
