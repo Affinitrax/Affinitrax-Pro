@@ -100,10 +100,10 @@ export default async function ReportsPage() {
     };
   });
 
-  // Summary totals
+  // Summary totals — revenue intentionally excluded (blind brokerage: partners see payout only)
   const totalClicks = stats.reduce((s, d) => s + d.clicks, 0);
   const totalFtds = stats.reduce((s, d) => s + d.ftds, 0);
-  const totalRevenue = stats.reduce((s, d) => s + d.totalRevenue, 0);
+  const totalLeads = stats.reduce((s, d) => s + d.leads, 0);
   const avgConvRate = totalClicks > 0 ? ((totalFtds / totalClicks) * 100).toFixed(1) : "0.0";
 
   return (
@@ -117,9 +117,9 @@ export default async function ReportsPage() {
         {/* Summary stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <SummaryCard label="Total Clicks" value={totalClicks.toLocaleString()} />
+          <SummaryCard label="Total Leads" value={totalLeads.toLocaleString()} />
           <SummaryCard label="Total FTDs" value={totalFtds.toLocaleString()} />
           <SummaryCard label="Avg Conv Rate" value={`${avgConvRate}%`} />
-          <SummaryCard label="Total Revenue" value={`$${totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
         </div>
 
         {/* Per-deal report cards */}
@@ -151,40 +151,28 @@ export default async function ReportsPage() {
                   </span>
                 </div>
 
-                {/* Stats row */}
-                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
+                {/* Stats row — revenue/margin excluded (blind brokerage) */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
                   <div className="text-center">
                     <p className="text-xs text-white font-semibold uppercase tracking-widest mb-1">FTDs</p>
-                    <p className="text-sm font-semibold text-white">{deal.ftds.toLocaleString()}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Clicks</p>
-                    <p className="text-sm font-semibold text-white">{deal.clicks.toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-green-400">{deal.ftds.toLocaleString()}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Leads</p>
                     <p className="text-sm font-semibold text-white">{deal.leads.toLocaleString()}</p>
                   </div>
                   <div className="text-center">
+                    <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Clicks</p>
+                    <p className="text-sm font-semibold text-white">{deal.clicks.toLocaleString()}</p>
+                  </div>
+                  <div className="text-center">
                     <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Conv %</p>
                     <p className="text-sm font-semibold text-[#00d4ff]">{deal.convRate}%</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Revenue</p>
-                    <p className="text-sm font-semibold text-[#f59e0b]">
-                      ${deal.totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="text-center">
                     <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Payout</p>
-                    <p className="text-sm font-semibold text-[#94a3b8]">
+                    <p className="text-sm font-semibold text-[#f59e0b]">
                       ${deal.totalPayout.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Margin</p>
-                    <p className={`text-sm font-semibold ${deal.margin > 0 ? "text-[#f59e0b]" : deal.margin < 0 ? "text-red-400" : "text-[#94a3b8]"}`}>
-                      ${deal.margin.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
                 </div>

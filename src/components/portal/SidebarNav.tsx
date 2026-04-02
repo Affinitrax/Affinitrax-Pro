@@ -95,6 +95,7 @@ export default function SidebarNav({ isAdmin }: { isAdmin: boolean }) {
     <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
       <NavLink href="/portal/dashboard" label="Dashboard" icon={ICONS.dashboard} />
       <NavLink href="/portal/deals" label="My Deals" icon={ICONS.deals} />
+      <NavLink href="/portal/leads" label="My Leads" icon={ICONS.leads} />
       <NavLink href="/portal/postbacks" label="Postback Logs" icon={ICONS.postbacks} />
       <NavLink href="/portal/reports" label="Reports" icon={ICONS.reports} />
       <NavLink href="/portal/billing" label="Billing" icon={ICONS.billing} />

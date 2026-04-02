@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import CopyButton from "@/components/portal/CopyButton";
+import PartnerApiKeys from "@/components/portal/PartnerApiKeys";
+import PartnerPostbackConfig from "@/components/portal/PartnerPostbackConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -324,13 +326,23 @@ export default async function IntegrationsPage() {
                     </div>
                   )}
 
+                  {/* API Keys — sellers only */}
+                  {deal.type !== "buy" && (
+                    <PartnerApiKeys dealId={deal.id} />
+                  )}
+
+                  {/* FTD Postback config — sellers only (receive conversion notifications) */}
+                  {deal.type !== "buy" && (
+                    <PartnerPostbackConfig dealId={deal.id} />
+                  )}
+
                   {/* Docs link */}
                   <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-white/5 bg-white/2">
                     <div className="flex items-center gap-2">
                       <svg className="w-4 h-4 text-[#334155]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
                       </svg>
-                      <span className="text-xs text-[#475569]">Does your seller integrate via API? Share the docs.</span>
+                      <span className="text-xs text-[#475569]">Integrating via API? Full docs here.</span>
                     </div>
                     <a
                       href="/docs/seller-api"
