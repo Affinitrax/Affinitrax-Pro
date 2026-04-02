@@ -79,7 +79,7 @@ export default async function IntegrationsPage() {
     .from("deals")
     .select("id, vertical, type, geos, model, status, notes")
     .eq("requester_id", user.id)
-    .in("status", ["active", "matched"])
+    .not("status", "eq", "cancelled")
     .order("created_at", { ascending: false });
 
   const typedDeals: Deal[] = (deals as Deal[]) ?? [];
@@ -112,7 +112,7 @@ export default async function IntegrationsPage() {
       .from("leads")
       .select("deal_id")
       .in("deal_id", dealIds)
-      .gte("received_at", since);
+      .gte("created_at", since);
 
     for (const l of (recentLeads as LeadRow[]) ?? []) {
       leadCountMap[l.deal_id] = (leadCountMap[l.deal_id] ?? 0) + 1;
@@ -188,6 +188,8 @@ export default async function IntegrationsPage() {
             const leadsToday = leadCountMap[deal.id] ?? 0;
             const leadsTotal = totalLeadMap[deal.id] ?? 0;
 
+            const isLive = deal.status === "active" || deal.status === "matched";
+
             return (
               <div key={deal.id} className="glass rounded-2xl overflow-hidden">
                 {/* Card header */}
@@ -223,136 +225,191 @@ export default async function IntegrationsPage() {
                   </div>
                 )}
 
-                <div className="p-6 space-y-5">
-                  {/* Lead Relay Status — shown for buy deals */}
-                  {deal.type !== "sell" && (
-                    <div className="rounded-xl border border-white/7 overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-3 bg-white/3 border-b border-white/7">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${relay ? "bg-green-400" : "bg-[#334155]"}`} />
-                          <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Lead Relay</span>
-                        </div>
-                        {relay && (
-                          <div className="flex items-center gap-4">
-                            <div className="text-center">
-                              <div className="text-white font-bold text-sm leading-none">{leadsToday}</div>
-                              <div className="text-[#334155] text-[10px] mt-0.5">today</div>
-                            </div>
-                            <div className="w-px h-6 bg-white/7" />
-                            <div className="text-center">
-                              <div className="text-white font-bold text-sm leading-none">{leadsTotal}</div>
-                              <div className="text-[#334155] text-[10px] mt-0.5">all time</div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="px-4 py-3">
-                        {relay ? (
-                          <div className="flex items-start gap-3">
-                            <div className="w-7 h-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                              <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                              </svg>
-                            </div>
-                            <div>
-                              <p className="text-white text-sm font-medium">Relay is active</p>
-                              <p className="text-[#475569] text-xs mt-0.5">
-                                Leads are being forwarded to your platform automatically. Nothing to configure.
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-start gap-3">
-                            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                              <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                              </svg>
-                            </div>
-                            <div>
-                              <p className="text-amber-400 text-sm font-medium">Relay not configured yet</p>
-                              <p className="text-[#475569] text-xs mt-0.5">
-                                Contact your account manager to set up automatic lead forwarding to your CRM.
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Buyer Postback URL — shown for buy deals */}
-                  {deal.type !== "sell" && (
-                    <div className="rounded-xl border border-white/7 overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-white/3 border-b border-white/7">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-[#7c3aed]" />
-                          <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Conversion Postback URL</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-[#334155]">Fire this when a lead converts</span>
-                          <CopyButton text={postbackUrl} />
-                        </div>
-                      </div>
-                      <pre className="px-4 py-3 text-xs text-[#00d4ff] overflow-x-auto" style={{ fontFamily: "var(--font-mono)" }}>
-                        {postbackUrl}
-                      </pre>
-                      <div className="px-4 py-2.5 border-t border-white/5 bg-white/2 text-xs text-[#334155]">
-                        Replace <code className="text-[#475569]">PAYOUT_AMOUNT</code> with your agreed rate.
-                        Your platform should auto-fill <code className="text-[#475569]">{"{click_id}"}</code> and <code className="text-[#475569]">{"{revenue}"}</code>.
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Seller Tracking Link — shown for sell deals */}
-                  {deal.type !== "buy" && (
-                    <div className="rounded-xl border border-white/7 overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2.5 bg-white/3 border-b border-white/7">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-[#00d4ff]" />
-                          <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Your Tracking Link</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-[#334155]">Send all traffic through this</span>
-                          <CopyButton text={`${BASE_URL}/api/track?deal_id=${deal.id}&seller_id=SELLER_ID&click_id={clickid}&sub_id={subid}&geo={geo}`} />
-                        </div>
-                      </div>
-                      <pre className="px-4 py-3 text-xs text-[#00d4ff] overflow-x-auto" style={{ fontFamily: "var(--font-mono)" }}>
-                        {`${BASE_URL}/api/track?deal_id=${deal.id}&seller_id=SELLER_ID&click_id={clickid}&sub_id={subid}&geo={geo}`}
-                      </pre>
-                      <div className="px-4 py-2.5 border-t border-white/5 bg-white/2 text-xs text-[#334155]">
-                        Replace <code className="text-[#475569]">SELLER_ID</code> with your name or label.
-                        Swap <code className="text-[#475569]">{"{clickid}"}</code> and <code className="text-[#475569]">{"{subid}"}</code> for your platform macros.
-                      </div>
-                    </div>
-                  )}
-
-                  {/* API Keys — sellers only */}
-                  {deal.type !== "buy" && (
-                    <PartnerApiKeys dealId={deal.id} />
-                  )}
-
-                  {/* FTD Postback config — sellers only (receive conversion notifications) */}
-                  {deal.type !== "buy" && (
-                    <PartnerPostbackConfig dealId={deal.id} />
-                  )}
-
-                  {/* Docs link */}
-                  <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-white/5 bg-white/2">
-                    <div className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-[#334155]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                {/* ── Status banners for non-live deals ───────────────────── */}
+                {deal.status === "pending" && (
+                  <div className="px-6 py-5 flex items-start gap-4">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span className="text-xs text-[#475569]">Integrating via API? Full docs here.</span>
                     </div>
-                    <a
-                      href="/docs/seller-api"
-                      target="_blank"
-                      className="text-xs text-[#00d4ff] hover:underline"
-                    >
-                      Seller API docs →
-                    </a>
+                    <div>
+                      <p className="text-amber-400 text-sm font-semibold">Deal under review</p>
+                      <p className="text-[#475569] text-xs mt-1 leading-relaxed">
+                        Your deal request has been received and is being reviewed by your account manager.
+                        Your tracking link and integration tools will appear here once it is activated.
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {deal.status === "paused" && (
+                  <div className="px-6 py-5 flex items-start gap-4">
+                    <div className="w-9 h-9 rounded-xl bg-gray-500/10 border border-gray-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-gray-300 text-sm font-semibold">Deal paused</p>
+                      <p className="text-[#475569] text-xs mt-1 leading-relaxed">
+                        This deal has been temporarily paused. Traffic intake and lead relay are suspended.
+                        Contact your account manager to resume.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {deal.status === "completed" && (
+                  <div className="px-6 py-5 flex items-start gap-4">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-emerald-400 text-sm font-semibold">Deal completed</p>
+                      <p className="text-[#475569] text-xs mt-1 leading-relaxed">
+                        This deal has been marked as completed. No further traffic intake or relay is active.
+                        Your historical lead data is still available in My Leads.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Full integration tools — active / matched deals only ── */}
+                {isLive && (
+                  <div className="p-6 space-y-5">
+                    {/* Lead Relay Status — buy deals */}
+                    {deal.type !== "sell" && (
+                      <div className="rounded-xl border border-white/7 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 bg-white/3 border-b border-white/7">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${relay ? "bg-green-400" : "bg-[#334155]"}`} />
+                            <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Lead Relay</span>
+                          </div>
+                          {relay && (
+                            <div className="flex items-center gap-4">
+                              <div className="text-center">
+                                <div className="text-white font-bold text-sm leading-none">{leadsToday}</div>
+                                <div className="text-[#334155] text-[10px] mt-0.5">today</div>
+                              </div>
+                              <div className="w-px h-6 bg-white/7" />
+                              <div className="text-center">
+                                <div className="text-white font-bold text-sm leading-none">{leadsTotal}</div>
+                                <div className="text-[#334155] text-[10px] mt-0.5">all time</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-4 py-3">
+                          {relay ? (
+                            <div className="flex items-start gap-3">
+                              <div className="w-7 h-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="text-white text-sm font-medium">Relay is active</p>
+                                <p className="text-[#475569] text-xs mt-0.5">
+                                  Leads are being forwarded to your platform automatically. Nothing to configure.
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-3">
+                              <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                                <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="text-amber-400 text-sm font-medium">Relay not configured yet</p>
+                                <p className="text-[#475569] text-xs mt-0.5">
+                                  Contact your account manager to set up automatic lead forwarding to your CRM.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Conversion Postback URL — buy deals */}
+                    {deal.type !== "sell" && (
+                      <div className="rounded-xl border border-white/7 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-white/3 border-b border-white/7">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[#7c3aed]" />
+                            <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Conversion Postback URL</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-[#334155]">Fire this when a lead converts</span>
+                            <CopyButton text={postbackUrl} />
+                          </div>
+                        </div>
+                        <pre className="px-4 py-3 text-xs text-[#00d4ff] overflow-x-auto" style={{ fontFamily: "var(--font-mono)" }}>
+                          {postbackUrl}
+                        </pre>
+                        <div className="px-4 py-2.5 border-t border-white/5 bg-white/2 text-xs text-[#334155]">
+                          Replace <code className="text-[#475569]">PAYOUT_AMOUNT</code> with your agreed rate.
+                          Your platform should auto-fill <code className="text-[#475569]">{"{click_id}"}</code> and <code className="text-[#475569]">{"{revenue}"}</code>.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tracking Link — sell deals */}
+                    {deal.type !== "buy" && (
+                      <div className="rounded-xl border border-white/7 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-white/3 border-b border-white/7">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[#00d4ff]" />
+                            <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Your Tracking Link</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-[#334155]">Send all traffic through this</span>
+                            <CopyButton text={`${BASE_URL}/api/track?deal_id=${deal.id}&seller_id=SELLER_ID&click_id={clickid}&sub_id={subid}&geo={geo}`} />
+                          </div>
+                        </div>
+                        <pre className="px-4 py-3 text-xs text-[#00d4ff] overflow-x-auto" style={{ fontFamily: "var(--font-mono)" }}>
+                          {`${BASE_URL}/api/track?deal_id=${deal.id}&seller_id=SELLER_ID&click_id={clickid}&sub_id={subid}&geo={geo}`}
+                        </pre>
+                        <div className="px-4 py-2.5 border-t border-white/5 bg-white/2 text-xs text-[#334155]">
+                          Replace <code className="text-[#475569]">SELLER_ID</code> with your name or label.
+                          Swap <code className="text-[#475569]">{"{clickid}"}</code> and <code className="text-[#475569]">{"{subid}"}</code> for your platform macros.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* API Keys — sell deals */}
+                    {deal.type !== "buy" && (
+                      <PartnerApiKeys dealId={deal.id} />
+                    )}
+
+                    {/* Postback config — sell deals */}
+                    {deal.type !== "buy" && (
+                      <PartnerPostbackConfig dealId={deal.id} />
+                    )}
+
+                    {/* Docs link */}
+                    <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-white/5 bg-white/2">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-[#334155]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                        </svg>
+                        <span className="text-xs text-[#475569]">Integrating via API? Full docs here.</span>
+                      </div>
+                      <a
+                        href="/docs/seller-api"
+                        target="_blank"
+                        className="text-xs text-[#00d4ff] hover:underline"
+                      >
+                        Seller API docs →
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

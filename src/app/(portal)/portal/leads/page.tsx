@@ -15,6 +15,7 @@ type RawLead = {
   sub1: string | null;
   created_at: string;
   deal_id: string;
+  is_test: boolean;
 };
 
 type Deal = {
@@ -72,9 +73,8 @@ export default async function PartnerLeadsPage() {
   const [{ data: rawLeads }, { data: deals }] = await Promise.all([
     admin
       .from("leads")
-      .select("id, email, country, status, click_id, sub1, created_at, deal_id")
+      .select("id, email, country, status, click_id, sub1, created_at, deal_id, is_test")
       .eq("partner_id", user.id)
-      .eq("is_test", false)
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
@@ -89,12 +89,14 @@ export default async function PartnerLeadsPage() {
     dealMap[d.id] = d;
   }
 
-  // Summary counts
-  const totalCount = leads.length;
-  const convertedCount = leads.filter((l) => l.status === "ftd").length;
-  const processingCount = leads.filter((l) =>
+  // Summary counts — test leads excluded from stats
+  const liveLeads = leads.filter((l) => !l.is_test);
+  const totalCount = liveLeads.length;
+  const convertedCount = liveLeads.filter((l) => l.status === "ftd").length;
+  const processingCount = liveLeads.filter((l) =>
     ["received", "relaying", "relayed", "parked", "failed"].includes(l.status)
   ).length;
+  const testCount = leads.filter((l) => l.is_test).length;
 
   return (
     <main className="flex-1 p-8 max-w-7xl">
@@ -107,7 +109,7 @@ export default async function PartnerLeadsPage() {
       </div>
 
       {/* Summary row */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className={`grid gap-4 mb-6 ${testCount > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
         <div className="glass rounded-2xl p-4 border border-white/5">
           <p className="text-xs uppercase tracking-widest font-semibold text-[#475569] mb-1">Total Leads</p>
           <p className="text-2xl font-bold text-white">{totalCount.toLocaleString()}</p>
@@ -120,6 +122,12 @@ export default async function PartnerLeadsPage() {
           <p className="text-xs uppercase tracking-widest font-semibold text-[#475569] mb-1">Processing</p>
           <p className="text-2xl font-bold text-amber-400">{processingCount.toLocaleString()}</p>
         </div>
+        {testCount > 0 && (
+          <div className="glass rounded-2xl p-4 border border-violet-500/20">
+            <p className="text-xs uppercase tracking-widest font-semibold text-violet-500/60 mb-1">Test Leads</p>
+            <p className="text-2xl font-bold text-violet-400">{testCount.toLocaleString()}</p>
+          </div>
+        )}
       </div>
 
       {/* Table or empty state */}
@@ -157,24 +165,31 @@ export default async function PartnerLeadsPage() {
                     return (
                       <tr
                         key={lead.id}
-                        className={`border-b border-white/5 hover:bg-white/[0.03] transition-colors ${i === leads.length - 1 ? "border-b-0" : ""}`}
+                        className={`border-b border-white/5 transition-colors ${i === leads.length - 1 ? "border-b-0" : ""} ${lead.is_test ? "bg-violet-500/[0.04] hover:bg-violet-500/[0.07]" : "hover:bg-white/[0.03]"}`}
                       >
                         <td className="px-4 py-3">
-                          <span className="text-[#475569] text-xs">{fmt(lead.created_at)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs ${lead.is_test ? "text-[#334155]" : "text-[#475569]"}`}>{fmt(lead.created_at)}</span>
+                            {lead.is_test && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-violet-500/20 text-violet-400 border border-violet-500/30">
+                                Test
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-[#94a3b8] text-xs font-mono">{maskEmail(lead.email)}</span>
+                          <span className={`text-xs font-mono ${lead.is_test ? "text-[#475569]" : "text-[#94a3b8]"}`}>{maskEmail(lead.email)}</span>
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-[#475569] text-xs font-mono">{lead.country ?? "—"}</span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-[#94a3b8] text-xs">
+                          <span className={`text-xs ${lead.is_test ? "text-[#334155]" : "text-[#94a3b8]"}`}>
                             {deal ? dealLabel(deal) : <span className="text-[#334155] font-mono">{lead.deal_id.slice(0, 8)}</span>}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${BADGE_STYLES[sanitized]}`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${lead.is_test ? "opacity-50" : ""} ${BADGE_STYLES[sanitized]}`}>
                             {sanitized}
                           </span>
                         </td>
@@ -191,6 +206,9 @@ export default async function PartnerLeadsPage() {
 
           <p className="text-xs text-[#475569] mt-3">
             Showing last {leads.length} leads
+            {testCount > 0 && (
+              <span className="text-violet-500/60"> · {testCount} test {testCount === 1 ? "lead" : "leads"} included</span>
+            )}
           </p>
         </>
       )}
