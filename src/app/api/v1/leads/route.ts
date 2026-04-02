@@ -125,7 +125,7 @@ export async function POST(req: Request) {
 
     if ((todayCount ?? 0) >= deal.volume_daily) {
       // Cap hit — silently accept to seller but don't store or relay
-      sendTelegramMessage(
+      await sendTelegramMessage(
         `⚠️ Daily cap hit — deal ${apiKey.deal_id.slice(0, 8)}\n` +
         `Cap: ${deal.volume_daily} leads/day. Lead rejected silently.`
       ).catch(() => {});
@@ -241,9 +241,9 @@ export async function POST(req: Request) {
     },
   });
 
-  // Alert admin if quality flags raised
+  // Alert admin if quality flags raised — awaited so Vercel doesn't kill it
   if (qualityFlags.length > 0) {
-    sendTelegramMessage(
+    await sendTelegramMessage(
       `⚠️ Lead quality flags — deal ${apiKey.deal_id.slice(0, 8)}\n` +
       `Flags: ${qualityFlags.join(", ")}\n` +
       `Email: ${email} · IP: ${ip}`
@@ -267,8 +267,8 @@ export async function POST(req: Request) {
 
     const isParked = result.relay_error === "parked";
     if (isParked) {
-      // Notify admin — lead is safe but needs a buyer integration (internal only)
-      sendTelegramMessage(
+      // Notify admin — awaited so Vercel doesn't kill it before it fires
+      await sendTelegramMessage(
         `🅿️ Lead parked — deal ${apiKey.deal_id.slice(0, 8)}\n` +
         `Email: ${email}\nNo active buyer integration. Configure one at /portal/admin/integrations`
       ).catch(() => {});
