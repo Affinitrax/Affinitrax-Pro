@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import CopyButton from "@/components/portal/CopyButton";
 import PartnerApiKeys from "@/components/portal/PartnerApiKeys";
 import PartnerPostbackConfig from "@/components/portal/PartnerPostbackConfig";
+import TestModeToggle from "@/components/portal/TestModeToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,7 @@ type Deal = {
   model: string | null;
   status: string | null;
   notes: string | null;
+  test_mode: boolean;
 };
 
 const STEPS = [
@@ -77,7 +79,7 @@ export default async function IntegrationsPage() {
 
   const { data: deals } = await supabase
     .from("deals")
-    .select("id, vertical, type, geos, model, status, notes")
+    .select("id, vertical, type, geos, model, status, notes, test_mode")
     .eq("requester_id", user.id)
     .not("status", "eq", "cancelled")
     .order("created_at", { ascending: false });
@@ -380,6 +382,11 @@ export default async function IntegrationsPage() {
                           Swap <code className="text-[#475569]">{"{clickid}"}</code> and <code className="text-[#475569]">{"{subid}"}</code> for your platform macros.
                         </div>
                       </div>
+                    )}
+
+                    {/* Test Mode toggle — sell deals */}
+                    {deal.type !== "buy" && (
+                      <TestModeToggle dealId={deal.id} initialTestMode={deal.test_mode} />
                     )}
 
                     {/* API Keys — sell deals */}

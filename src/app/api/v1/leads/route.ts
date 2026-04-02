@@ -101,7 +101,7 @@ export async function POST(req: Request) {
   // ── Validate deal status + enforce daily cap ──────────────────────────────
   const { data: deal } = await admin
     .from("deals")
-    .select("id, status, volume_daily")
+    .select("id, status, volume_daily, test_mode")
     .eq("id", apiKey.deal_id)
     .single();
 
@@ -161,7 +161,9 @@ export async function POST(req: Request) {
   const rawClickId = typeof body.click_id === "string" ? body.click_id.trim() : null;
   const click_id = rawClickId && isValidClickId(rawClickId) ? rawClickId : null;
 
-  const isTest = body.is_test === true;
+  // Deal-level test_mode overrides the per-lead flag — if the deal is in test mode,
+  // every lead is a test lead regardless of what the caller sends.
+  const isTest = body.is_test === true || deal.test_mode === true;
 
   // ── Traffic quality checks (non-blocking — flag only) ────────────────────
   const qualityFlags: string[] = [];

@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     // ── Check deal status ─────────────────────────────────────────────────
     const { data: deal } = await supabase
       .from("deals")
-      .select("id, status, volume_daily")
+      .select("id, status, volume_daily, test_mode")
       .eq("id", deal_id)
       .single();
 
@@ -118,6 +118,7 @@ export async function GET(request: NextRequest) {
           duplicate_ip: isDuplicateIp,
           click_id_generated: !rawClickId || !isValidClickId(rawClickId ?? ""),
           seller_id_valid: validatedSellerId !== null,
+          test_mode: deal.test_mode === true,
         },
       },
     });
