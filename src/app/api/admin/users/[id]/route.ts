@@ -28,14 +28,24 @@ export async function PATCH(
   const body = await req.json();
   const { status, badge } = body as { status?: string; badge?: string | null };
 
+  const VALID_STATUSES = ["approved", "pending", "suspended"] as const;
+  const VALID_BADGES = ["verified", "top_performer", "premium", "early_adopter", null, ""] as const;
+
+  if (status !== undefined && !VALID_STATUSES.includes(status as typeof VALID_STATUSES[number])) {
+    return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+  }
+  if (badge !== undefined && !VALID_BADGES.includes(badge as typeof VALID_BADGES[number])) {
+    return NextResponse.json({ error: "Invalid badge value" }, { status: 400 });
+  }
+
   const update: Record<string, string | null | boolean> = {};
   if (status !== undefined) {
     update.status = status;
-    // Sync verified flag with approval status
+    // Sync verified flag and role with approval status
     if (status === "approved") { update.verified = true; update.role = "partner"; }
     else if (status === "suspended" || status === "pending") { update.verified = false; update.role = "pending"; }
   }
-  if (badge !== undefined) update.badge = badge;
+  if (badge !== undefined) update.badge = badge || null;
 
   const admin = createAdminClient();
   const { error } = await admin

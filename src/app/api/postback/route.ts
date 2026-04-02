@@ -45,13 +45,38 @@ async function handlePostback(request: NextRequest): Promise<Response> {
   try {
     const searchParams = request.nextUrl.searchParams;
 
-    const deal_id = searchParams.get("deal_id");
-    const click_id = searchParams.get("click_id");
-    const event_type = searchParams.get("event_type") || "conversion";
-    const sub_id = searchParams.get("sub_id");
-    const geo = searchParams.get("geo");
-    const revenue = searchParams.get("revenue");
-    const payout = searchParams.get("payout");
+    // For POST requests, also merge body params (JSON or form-encoded).
+    // Query string params take precedence if both are provided.
+    const bodyParams = new URLSearchParams();
+    if (request.method === "POST") {
+      const contentType = request.headers.get("content-type") ?? "";
+      try {
+        if (contentType.includes("application/json")) {
+          const json = await request.json() as Record<string, string>;
+          for (const [k, v] of Object.entries(json)) {
+            if (typeof v === "string") bodyParams.set(k, v);
+          }
+        } else if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+          const form = await request.formData();
+          form.forEach((v, k) => { if (typeof v === "string") bodyParams.set(k, v); });
+        }
+      } catch {
+        // Malformed body — ignore, fall through to URL params only
+      }
+    }
+
+    /** Get a param preferring URL query string over body */
+    function getParam(key: string): string | null {
+      return searchParams.get(key) ?? bodyParams.get(key);
+    }
+
+    const deal_id = getParam("deal_id");
+    const click_id = getParam("click_id");
+    const event_type = getParam("event_type") || "conversion";
+    const sub_id = getParam("sub_id");
+    const geo = getParam("geo");
+    const revenue = getParam("revenue");
+    const payout = getParam("payout");
 
     if (!deal_id) {
       // Silent fail — postbacks should always return 200
@@ -132,11 +157,10 @@ async function handlePostback(request: NextRequest): Promise<Response> {
       }
     }
 
-    // Collect all raw params for audit trail
+    // Collect all raw params for audit trail (merge URL + body params)
     const rawParams: Record<string, string> = {};
-    searchParams.forEach((value, key) => {
-      rawParams[key] = value;
-    });
+    bodyParams.forEach((value, key) => { rawParams[key] = value; }); // body first
+    searchParams.forEach((value, key) => { rawParams[key] = value; }); // URL overrides
 
     const { error } = await supabase.from("postback_events").insert({
       deal_id,

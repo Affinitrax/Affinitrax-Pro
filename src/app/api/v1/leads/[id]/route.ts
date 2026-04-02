@@ -51,7 +51,7 @@ export async function GET(
 
   const { data: lead } = await admin
     .from("leads")
-    .select("id, deal_id, status, buyer_lead_id, redirect_url, relay_error, relay_attempts, relayed_at, ftd_at, created_at, is_test")
+    .select("id, deal_id, status, buyer_lead_id, redirect_url, relayed_at, ftd_at, created_at, is_test")
     .eq("id", id)
     .eq("deal_id", apiKey.deal_id) // enforce ownership
     .single();
@@ -60,16 +60,24 @@ export async function GET(
     return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   }
 
+  // Sanitize status — never expose internal relay states (parked, relaying, failed details)
+  // to sellers. Map to a partner-safe status surface.
+  function sanitizeStatus(s: string): string {
+    if (s === "ftd") return "ftd";
+    if (s === "rejected") return "rejected";
+    if (s === "relayed") return "relayed";
+    // received / relaying / parked / failed all appear as "in_progress" to seller
+    return "in_progress";
+  }
+
   return NextResponse.json({
     lead_id: lead.id,
-    status: lead.status,
+    status: sanitizeStatus(lead.status),
     buyer_lead_id: lead.buyer_lead_id,
     redirect_url: lead.redirect_url,
-    relay_attempts: lead.relay_attempts,
     relayed_at: lead.relayed_at,
     ftd_at: lead.ftd_at,
     is_test: lead.is_test,
     created_at: lead.created_at,
-    ...(lead.relay_error ? { relay_error: lead.relay_error } : {}),
   });
 }

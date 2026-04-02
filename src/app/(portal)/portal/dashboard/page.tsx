@@ -36,7 +36,7 @@ export default async function DashboardPage() {
     ] = await Promise.all([
       admin.from("deals").select("id, vertical, type, geos, model, status, requester_id, created_at").order("created_at", { ascending: false }).limit(10),
       admin.from("postback_events").select("event_type, revenue, payout"),
-      admin.from("profiles").select("id, email, company_name, telegram_handle, status, role"),
+      admin.from("profiles").select("id, company_name, telegram_handle, status, role"),
       admin.from("invoices").select("id, status, amount, currency"),
     ]);
 
@@ -56,9 +56,8 @@ export default async function DashboardPage() {
     // Partner name map
     const partnerMap: Record<string, string> = {};
     for (const p of profiles ?? []) {
-      partnerMap[(p as { id: string }).id] = (p as { company_name: string | null; telegram_handle: string | null; email: string | null }).company_name
+      partnerMap[(p as { id: string }).id] = (p as { company_name: string | null; telegram_handle: string | null }).company_name
         ?? (p as { telegram_handle: string | null }).telegram_handle
-        ?? (p as { email: string | null }).email
         ?? "Unknown";
     }
 

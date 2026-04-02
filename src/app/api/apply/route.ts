@@ -9,7 +9,7 @@ const FROM =
   process.env.RESEND_DOMAIN_VERIFIED?.trim() === "true"
     ? "Affinitrax <info@affinitrax.com>"
     : "Affinitrax <onboarding@resend.dev>";
-const NOTIFY_TO = "cryp70.ai@gmail.com";
+const NOTIFY_TO = process.env.ADMIN_NOTIFY_EMAIL ?? "cryp70.ai@gmail.com";
 
 /** Escape user-supplied strings before embedding in HTML email bodies. */
 function esc(text: string | undefined | null): string {
@@ -153,7 +153,8 @@ export async function POST(request: NextRequest) {
     );
 
     // ── Admin email notification ──────────────────────────────────────────
-    resend.emails
+    // Must be awaited — Vercel serverless kills fire-and-forget before completion
+    await resend.emails
       .send({
         from: FROM,
         to: NOTIFY_TO,
@@ -192,7 +193,7 @@ export async function POST(request: NextRequest) {
       .catch((err) => console.error("[Resend] Application email error:", err));
 
     // ── Confirmation email to applicant ───────────────────────────────────
-    resend.emails
+    await resend.emails
       .send({
         from: FROM,
         to: email,

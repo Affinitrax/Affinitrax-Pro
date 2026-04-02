@@ -108,24 +108,25 @@ export default async function IntegrationsPage() {
       integrationMap[i.deal_id] = i;
     }
 
-    // Leads received in last 24 hours
-    // eslint-disable-next-line react-hooks/purity
+    // Leads received in last 24 hours — exclude test leads for accurate stats
     const since = new Date(Date.now() - 86400000).toISOString();
     const { data: recentLeads } = await admin
       .from("leads")
       .select("deal_id")
       .in("deal_id", dealIds)
+      .eq("is_test", false)
       .gte("created_at", since);
 
     for (const l of (recentLeads as LeadRow[]) ?? []) {
       leadCountMap[l.deal_id] = (leadCountMap[l.deal_id] ?? 0) + 1;
     }
 
-    // All-time lead counts
+    // All-time live lead counts — exclude test leads
     const { data: allLeads } = await admin
       .from("leads")
       .select("deal_id")
-      .in("deal_id", dealIds);
+      .in("deal_id", dealIds)
+      .eq("is_test", false);
 
     for (const l of (allLeads as LeadRow[]) ?? []) {
       totalLeadMap[l.deal_id] = (totalLeadMap[l.deal_id] ?? 0) + 1;

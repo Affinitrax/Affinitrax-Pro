@@ -24,14 +24,14 @@ async function requireAdmin() {
 
 export async function GET(req: Request) {
   const user = await requireAdmin();
-  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
   const dealId = url.searchParams.get("deal_id");
   const status = url.searchParams.get("status");
   const email = url.searchParams.get("email");
-  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
-  const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50")));
+  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10) || 50));
   const offset = (page - 1) * limit;
 
   const admin = createAdminClient();

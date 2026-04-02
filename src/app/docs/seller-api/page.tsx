@@ -27,7 +27,7 @@ const CURL_STATUS = `curl ${BASE}/api/v1/leads/LEAD_ID \\
 
 const RESPONSE_OK = `{
   "lead_id": "a3f1c2d4-...",
-  "status": "relayed",
+  "status": "in_progress",
   "buyer_lead_id": "12345",
   "redirect_url": null
 }`;
@@ -53,7 +53,7 @@ const JS_EXAMPLE = `const res = await fetch("${BASE}/api/v1/leads", {
 });
 
 const lead = await res.json();
-console.log(lead.id, lead.status);`;
+console.log(lead.lead_id, lead.status);`;
 
 const PHP_EXAMPLE = `$ch = curl_init("${BASE}/api/v1/leads");
 curl_setopt_array($ch, [
@@ -74,7 +74,7 @@ curl_setopt_array($ch, [
 ]);
 
 $response = json_decode(curl_exec($ch), true);
-echo $response["id"];`;
+echo $response["lead_id"];`;
 
 type Field = {
   name: string;
@@ -97,11 +97,10 @@ const FIELDS: Field[] = [
 ];
 
 const STATUSES = [
-  { s: "pending",  color: "bg-amber-500/15 text-amber-400 border-amber-500/30",   desc: "Lead received and queued for relay" },
-  { s: "relayed",  color: "bg-blue-500/15 text-blue-400 border-blue-500/30",      desc: "Lead delivered to buyer CRM successfully" },
-  { s: "ftd",      color: "bg-green-500/15 text-green-400 border-green-500/30",   desc: "First-time deposit confirmed by buyer" },
-  { s: "failed",   color: "bg-red-500/15 text-red-400 border-red-500/30",         desc: "Relay failed — buyer CRM rejected or unreachable" },
-  { s: "rejected", color: "bg-red-500/15 text-red-400 border-red-500/30",         desc: "Lead rejected (duplicate, invalid fields, etc.)" },
+  { s: "in_progress", color: "bg-amber-500/15 text-amber-400 border-amber-500/30",   desc: "Lead received and being processed — check again shortly" },
+  { s: "relayed",     color: "bg-blue-500/15 text-blue-400 border-blue-500/30",      desc: "Lead delivered and accepted" },
+  { s: "ftd",         color: "bg-green-500/15 text-green-400 border-green-500/30",   desc: "First-time deposit confirmed" },
+  { s: "rejected",    color: "bg-red-500/15 text-red-400 border-red-500/30",         desc: "Lead rejected (duplicate, invalid fields, etc.)" },
 ];
 
 function CodeBlock({ code, label }: { code: string; label?: string }) {
@@ -264,7 +263,7 @@ export default function SellerApiDocs() {
 
             <div className="mt-2 p-3 rounded-lg bg-[#00d4ff]/5 border border-[#00d4ff]/15">
               <p className="text-[#00d4ff] text-xs">
-                <span className="font-semibold">Tip:</span> Store the returned <code className="font-mono">id</code> alongside your{" "}
+                <span className="font-semibold">Tip:</span> Store the returned <code className="font-mono">lead_id</code> alongside your{" "}
                 <code className="font-mono">click_id</code>. You&apos;ll receive this ID in postbacks so you can match FTDs back to your traffic.
               </p>
             </div>

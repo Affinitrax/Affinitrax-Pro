@@ -9,7 +9,7 @@ type Deal = {
   geos: string[] | null;
   model: string | null;
   volume_daily: number | null;
-  budget: number | null;
+  budget_usd: number | null;
   rate_usd: number | null;
   status: string | null;
   notes: string | null;

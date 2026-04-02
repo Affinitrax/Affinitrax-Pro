@@ -91,12 +91,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
   }
 
-  // Update last_used_at (fire and forget)
+  // Update last_used_at (fire and forget — must have .catch to avoid unhandled rejection)
   admin
     .from("deal_api_keys")
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", apiKey.id)
-    .then(() => {});
+    .then(() => {})
+    .catch(() => {});
 
   // ── Validate deal status + enforce daily cap ──────────────────────────────
   const { data: deal } = await admin
