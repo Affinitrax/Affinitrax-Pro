@@ -27,6 +27,8 @@ type DealIntegration = {
   content_type: "json" | "form_urlencoded";
   response_lead_id_path: string;
   response_redirect_url_path: string | null;
+  allowed_geos: string[] | null;
+  priority: number;
 }
 
 
@@ -131,22 +133,29 @@ export async function relayLead(
     .update({ status: "relaying" })
     .eq("id", leadId);
 
-  // 1. Load integration config
-  const { data: integration, error: intErr } = await admin
+  // 1. Load integration config — fetch all active integrations ordered by priority,
+  //    then pick the first whose geo filter matches the lead's country.
+  const { data: integrations, error: intErr } = await admin
     .from("deal_integrations")
     .select("*")
     .eq("deal_id", dealId)
     .eq("status", "active")
-    .single();
+    .order("priority", { ascending: true });
+
+  const leadCountry = payload.country?.toUpperCase() ?? "";
+  const integration = (integrations ?? []).find(
+    (i) => i.allowed_geos === null || (Array.isArray(i.allowed_geos) && i.allowed_geos.includes(leadCountry))
+  ) ?? null;
 
   if (intErr || !integration) {
-    // No buyer integration yet — park the lead (safe in DB, replayable later)
+    // No matching integration — park the lead (safe in DB, replayable later)
+    const geoReason = `No active buyer integration for geo: ${payload.country ?? "unknown"}`;
     await admin
       .from("leads")
       .update({ status: "parked", relay_error: null })
       .eq("id", leadId);
     await logEvent(leadId, "inbound", "lead_parked", {
-      payload: { reason: "No active buyer integration for this deal" },
+      payload: { reason: geoReason },
     });
     return { success: false, relay_error: "parked" };
   }

@@ -23,7 +23,7 @@ export async function GET() {
   const admin = createAdminClient();
   const { data } = await admin
     .from("deal_integrations")
-    .select("id, deal_id, name, endpoint_url, auth_type, content_type, status, created_at, updated_at")
+    .select("id, deal_id, name, endpoint_url, auth_type, content_type, status, allowed_geos, priority, created_at, updated_at")
     .order("created_at", { ascending: false });
 
   return NextResponse.json(data ?? []);
@@ -40,6 +40,7 @@ export async function POST(req: Request) {
     auth_credential, // plaintext — will be encrypted
     content_type, response_lead_id_path, response_redirect_url_path,
     ip_whitelist_required, notes, status,
+    allowed_geos, priority,
   } = body;
 
   if (!deal_id || !name || !auth_type) {
@@ -71,6 +72,8 @@ export async function POST(req: Request) {
       ip_whitelist_required: ip_whitelist_required ?? false,
       notes: notes ?? null,
       status: status ?? "testing",
+      allowed_geos: allowed_geos ?? null,
+      priority: priority ?? 10,
     })
     .select("id")
     .single();

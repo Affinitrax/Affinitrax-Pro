@@ -20,6 +20,8 @@ type Integration = {
   notes: string | null;
   status: "active" | "inactive" | "testing";
   mappings: FieldMapping[];
+  allowed_geos: string[] | null;
+  priority: number;
 };
 
 type FieldMapping = {
@@ -106,6 +108,8 @@ export default function IntegrationDetailPage() {
         allowed_ips: intData.allowed_ips ?? null,
         notes: intData.notes ?? "",
         status: intData.status,
+        allowed_geos: intData.allowed_geos ?? null,
+        priority: intData.priority ?? 10,
       });
       setMappings(intData.mappings ?? []);
 
@@ -378,6 +382,47 @@ export default function IntegrationDetailPage() {
             {form.ip_whitelist_required && (!form.allowed_ips || form.allowed_ips.length === 0) && (
               <p className="text-amber-400 text-xs mt-1">⚠ Enforcement is on but no IPs are listed — all postbacks will be blocked.</p>
             )}
+          </div>
+
+          {/* ── Geo Routing ─────────────────────────────────────────────────── */}
+          <div className="md:col-span-2 pt-2 border-t border-white/5">
+            <h3 className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-3">Geo Routing</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-[#94a3b8] mb-1.5">Allowed GEOs</label>
+                {form.allowed_geos && form.allowed_geos.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {form.allowed_geos.map((geo) => (
+                      <span key={geo} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/20 font-mono">
+                        {geo}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <input
+                  placeholder="Leave empty for all geos, or enter: ES, IT, UK"
+                  value={form.allowed_geos ? form.allowed_geos.join(", ") : ""}
+                  onChange={(e) => {
+                    const parsed = e.target.value.trim()
+                      ? e.target.value.split(",").map((g) => g.trim().toUpperCase()).filter(Boolean)
+                      : null;
+                    setForm((f) => ({ ...f, allowed_geos: parsed }));
+                  }}
+                  className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 font-mono"
+                />
+                <p className="text-[#475569] text-xs mt-1">Comma-separated ISO-2 country codes. Empty = accept all geos.</p>
+              </div>
+              <div>
+                <label className="block text-xs text-[#94a3b8] mb-1.5">Priority</label>
+                <input
+                  type="number"
+                  value={form.priority ?? 10}
+                  onChange={(e) => setForm((f) => ({ ...f, priority: parseInt(e.target.value, 10) || 10 }))}
+                  className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
+                />
+                <p className="text-[#475569] text-xs mt-1">Lower number = higher priority when multiple integrations match a geo.</p>
+              </div>
+            </div>
           </div>
         </div>
 

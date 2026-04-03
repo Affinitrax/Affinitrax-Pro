@@ -23,6 +23,8 @@ export default function NewIntegrationPage() {
     response_redirect_url_path: "",
     notes: "",
     status: "testing",
+    allowed_geos: "" as string,  // comma-separated ISO codes, empty = all geos
+    priority: "10",
   });
 
   useEffect(() => {
@@ -47,6 +49,10 @@ export default function NewIntegrationPage() {
       body: JSON.stringify({
         ...form,
         response_redirect_url_path: form.response_redirect_url_path || null,
+        allowed_geos: form.allowed_geos.trim()
+          ? form.allowed_geos.split(",").map((g) => g.trim().toUpperCase()).filter(Boolean)
+          : null,
+        priority: parseInt(form.priority, 10) || 10,
       }),
     });
 
@@ -122,6 +128,32 @@ export default function NewIntegrationPage() {
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
+          </div>
+        </section>
+
+        <section className="glass rounded-2xl p-6 border border-white/5 space-y-4">
+          <h2 className="text-white font-semibold">Geo Routing &amp; Priority</h2>
+
+          <div>
+            <label className="block text-xs text-[#94a3b8] mb-1.5">Allowed GEOs</label>
+            <input
+              placeholder="Leave empty for all geos, or enter: ES, IT, UK"
+              value={form.allowed_geos}
+              onChange={(e) => set("allowed_geos", e.target.value)}
+              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 font-mono"
+            />
+            <p className="text-[#475569] text-xs mt-1">Comma-separated ISO-2 country codes. Empty = accept all geos.</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-[#94a3b8] mb-1.5">Priority</label>
+            <input
+              type="number"
+              value={form.priority}
+              onChange={(e) => set("priority", e.target.value)}
+              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
+            />
+            <p className="text-[#475569] text-xs mt-1">Lower number = higher priority when multiple integrations match a geo.</p>
           </div>
         </section>
 
