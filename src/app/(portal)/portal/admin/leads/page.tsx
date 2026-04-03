@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+type DealOption = {
+  id: string;
+  vertical: string | null;
+  geos: string[] | null;
+  status: string;
+};
+
 type Lead = {
   id: string;
   deal_id: string;
@@ -40,6 +47,13 @@ export default function AdminLeadsPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterEmail, setFilterEmail] = useState("");
   const [filterDeal, setFilterDeal] = useState("");
+  const [deals, setDeals] = useState<DealOption[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/deals/list")
+      .then((r) => r.json())
+      .then((d: DealOption[]) => setDeals(Array.isArray(d) ? d : []));
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -84,13 +98,24 @@ export default function AdminLeadsPage() {
           onChange={(e) => { setFilterEmail(e.target.value); setPage(1); }}
           className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-[#475569] focus:outline-none focus:border-[#00d4ff]/40 w-56"
         />
-        <input
-          type="text"
-          placeholder="Deal ID…"
+        <select
           value={filterDeal}
           onChange={(e) => { setFilterDeal(e.target.value); setPage(1); }}
-          className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-[#475569] focus:outline-none focus:border-[#00d4ff]/40 w-48 font-mono"
-        />
+          className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#00d4ff]/40"
+        >
+          <option value="">All deals</option>
+          {deals.map((d) => {
+            const label = [
+              d.vertical ? d.vertical.charAt(0).toUpperCase() + d.vertical.slice(1) : null,
+              d.geos && d.geos.length > 0 ? d.geos.join(", ") : null,
+            ].filter(Boolean).join(" · ") || d.id.slice(0, 8);
+            return (
+              <option key={d.id} value={d.id}>
+                {d.id.slice(0, 8)} — {label}{d.status !== "active" ? ` (${d.status})` : ""}
+              </option>
+            );
+          })}
+        </select>
         <select
           value={filterStatus}
           onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
