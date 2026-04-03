@@ -1,38 +1,36 @@
 /**
- * POST /api/v1/leads
+ * POST /api/v1/leads  — seller lead intake
+ * GET  /api/v1/leads  — bulk lead list with date-range filter
  *
- * Seller-facing lead intake endpoint.
- * Sellers authenticate with their deal API key (header: X-API-Key or Authorization: Bearer).
- * Validates the key, stores the lead, and relays it to the configured buyer CRM.
+ * Both endpoints authenticate with a deal API key
+ * (header: X-API-Key or Authorization: Bearer).
  *
- * Request body (JSON):
+ * ── GET params ──────────────────────────────────────────────────────────────
+ *   from   ISO 8601 datetime  required   range start (inclusive)
+ *   to     ISO 8601 datetime  required   range end   (inclusive)
+ *   skip   integer            default 0
+ *   take   integer            default 250, max 1000
+ *
+ * Response:
+ *   { leads: [...], total, skip, take, from, to }
+ *
+ * Each lead object:
+ *   { lead_id, status, created_at, email, click_id, sub1, sub2, sub3,
+ *     country, is_test, ftd_at }
+ *
+ * Statuses exposed to sellers: in_progress | relayed | ftd | rejected
+ * Internal relay states (parked / relaying / failed / received) → in_progress
+ *
+ * ── POST body ────────────────────────────────────────────────────────────────
  *   email        string  required
  *   first_name   string  optional
  *   last_name    string  optional
  *   phone        string  required
  *   country      string  required  ISO-2
  *   ip           string  optional
- *   click_id     string  optional  alphanumeric + hyphens/underscores, max 128 chars
- *   sub1/2/3     string  optional  custom tracking params
+ *   click_id     string  optional  alphanumeric + hyphens/underscores, max 128
+ *   sub1/2/3     string  optional
  *   is_test      boolean optional  default false
- *
- * Response 200:
- *   { lead_id, status: "in_progress" }
- *   status is always "in_progress" — internal relay state (parked/failed) is
- *   never exposed to sellers (blind brokerage).
- *
- * Response errors:
- *   401  Invalid or missing API key
- *   422  Missing required fields / validation failure
- *   429  Rate limited
- *   500  Internal error
- *
- * Security hardening:
- *   - Rate limited: 200 leads/IP/min
- *   - click_id format validated
- *   - Daily cap enforced against deals.volume_daily
- *   - Duplicate email per deal (24 h) silently accepted but flagged
- *   - Duplicate IP per deal (1 h) silently accepted but flagged
  */
 
 import { NextResponse } from "next/server";
@@ -41,11 +39,141 @@ import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { relayLead } from "@/lib/integration/relay";
 import { sendTelegramMessage } from "@/lib/telegram";
 
+/** Maps internal relay states to the partner-safe status surface. */
+function sanitizeStatus(s: string): string {
+  if (s === "ftd")      return "ftd";
+  if (s === "rejected") return "rejected";
+  if (s === "relayed")  return "relayed";
+  return "in_progress"; // received / relaying / parked / failed
+}
+
+/** Resolves an API key string to the matching DB row, or null. */
+async function resolveApiKey(rawKey: string) {
+  const admin = createAdminClient();
+  const { hashApiKey } = await import("@/lib/integration/api-keys");
+  const keyHash = await hashApiKey(rawKey);
+  const { data } = await admin
+    .from("deal_api_keys")
+    .select("id, deal_id, partner_id, status")
+    .eq("key_hash", keyHash)
+    .eq("status", "active")
+    .single();
+  return { admin, apiKey: data };
+}
+
+/** Extracts the raw API key from request headers. */
+function extractRawKey(req: Request): string | null {
+  const xApiKey = req.headers.get("x-api-key");
+  const authHeader = req.headers.get("authorization");
+  return xApiKey ?? (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
+}
+
 /** Validates click_id format: alphanumeric, hyphens, underscores only. Max 128 chars. */
 function isValidClickId(id: string): boolean {
   return /^[A-Za-z0-9_-]{1,128}$/.test(id);
 }
 
+// ── MAX_RANGE_MS: 31 days ────────────────────────────────────────────────────
+const MAX_RANGE_MS = 31 * 24 * 60 * 60 * 1000;
+
+// ────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/leads — bulk lead poll by date range
+// ────────────────────────────────────────────────────────────────────────────
+export async function GET(req: Request) {
+  const ip = getClientIp(req);
+  const rl = rateLimit(`v1-leads-list:${ip}`, 60, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded" },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+    );
+  }
+
+  const rawKey = extractRawKey(req);
+  if (!rawKey) {
+    return NextResponse.json(
+      { error: "API key required. Use X-API-Key header or Authorization: Bearer <key>" },
+      { status: 401 }
+    );
+  }
+
+  const { admin, apiKey } = await resolveApiKey(rawKey);
+  if (!apiKey) {
+    return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
+  }
+
+  // ── Parse + validate query params ────────────────────────────────────────
+  const url  = new URL(req.url);
+  const fromStr = url.searchParams.get("from");
+  const toStr   = url.searchParams.get("to");
+  const skip = Math.max(0,    parseInt(url.searchParams.get("skip") ?? "0",   10) || 0);
+  const take = Math.min(1000, Math.max(1, parseInt(url.searchParams.get("take") ?? "250", 10) || 250));
+
+  if (!fromStr || !toStr) {
+    return NextResponse.json(
+      { error: "from and to query parameters are required (ISO 8601, e.g. 2024-11-01T00:00:00.000Z)" },
+      { status: 400 }
+    );
+  }
+
+  const fromDate = new Date(fromStr);
+  const toDate   = new Date(toStr);
+
+  if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+    return NextResponse.json(
+      { error: "Invalid date format. Use ISO 8601 (e.g. 2024-11-01T00:00:00.000Z)" },
+      { status: 400 }
+    );
+  }
+
+  if (toDate <= fromDate) {
+    return NextResponse.json({ error: "to must be after from" }, { status: 400 });
+  }
+
+  if (toDate.getTime() - fromDate.getTime() > MAX_RANGE_MS) {
+    return NextResponse.json({ error: "Date range cannot exceed 31 days" }, { status: 400 });
+  }
+
+  // ── Query leads scoped to this API key's deal ─────────────────────────────
+  const { data: leads, count } = await admin
+    .from("leads")
+    .select(
+      "id, status, created_at, email, click_id, sub1, sub2, sub3, country, is_test, ftd_at",
+      { count: "exact" }
+    )
+    .eq("deal_id", apiKey.deal_id)
+    .gte("created_at", fromDate.toISOString())
+    .lte("created_at", toDate.toISOString())
+    .order("created_at", { ascending: false })
+    .range(skip, skip + take - 1);
+
+  const sanitized = (leads ?? []).map((l) => ({
+    lead_id:    l.id,
+    status:     sanitizeStatus(l.status as string),
+    created_at: l.created_at,
+    email:      l.email,
+    click_id:   l.click_id,
+    sub1:       l.sub1,
+    sub2:       l.sub2,
+    sub3:       l.sub3,
+    country:    l.country,
+    is_test:    l.is_test,
+    ftd_at:     l.ftd_at,
+  }));
+
+  return NextResponse.json({
+    leads:  sanitized,
+    total:  count ?? 0,
+    skip,
+    take,
+    from:   fromDate.toISOString(),
+    to:     toDate.toISOString(),
+  });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/leads — submit a single lead
+// ────────────────────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   // ── Rate limit: 200 leads per IP per minute ───────────────────────────────
   const ip = getClientIp(req);
@@ -57,17 +185,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // ── Extract API key ───────────────────────────────────────────────────────
-  const authHeader = req.headers.get("authorization");
-  const xApiKey = req.headers.get("x-api-key");
-
-  let rawKey: string | null = null;
-  if (xApiKey) {
-    rawKey = xApiKey;
-  } else if (authHeader?.startsWith("Bearer ")) {
-    rawKey = authHeader.slice(7);
-  }
-
+  // ── Extract + validate API key ────────────────────────────────────────────
+  const rawKey = extractRawKey(req);
   if (!rawKey) {
     return NextResponse.json(
       { error: "API key required. Use X-API-Key header or Authorization: Bearer <key>" },
@@ -75,23 +194,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // ── Validate API key against DB ───────────────────────────────────────────
-  const admin = createAdminClient();
-  const { hashApiKey } = await import("@/lib/integration/api-keys");
-  const keyHash = await hashApiKey(rawKey);
-
-  const { data: apiKey } = await admin
-    .from("deal_api_keys")
-    .select("id, deal_id, partner_id, status")
-    .eq("key_hash", keyHash)
-    .eq("status", "active")
-    .single();
-
+  const { admin, apiKey } = await resolveApiKey(rawKey);
   if (!apiKey) {
     return NextResponse.json({ error: "Invalid or revoked API key" }, { status: 401 });
   }
 
-  // Update last_used_at (fire and forget — must have .catch to avoid unhandled rejection)
+  // Update last_used_at (fire and forget)
   admin
     .from("deal_api_keys")
     .update({ last_used_at: new Date().toISOString() })
@@ -106,12 +214,9 @@ export async function POST(req: Request) {
     .single();
 
   if (!deal || !["active", "matched"].includes(deal.status)) {
-    // Deal is paused or cancelled — silently accept (blind brokerage: don't reveal status)
-    // but park the lead internally with a note
     return NextResponse.json({ lead_id: null, status: "in_progress" });
   }
 
-  // Cap enforcement: if volume_daily is set, count today's non-test leads
   if (deal.volume_daily != null && deal.volume_daily > 0) {
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
@@ -124,7 +229,6 @@ export async function POST(req: Request) {
       .gte("created_at", todayStart.toISOString());
 
     if ((todayCount ?? 0) >= deal.volume_daily) {
-      // Cap hit — silently accept to seller but don't store or relay
       await sendTelegramMessage(
         `⚠️ Daily cap hit — deal ${apiKey.deal_id.slice(0, 8)}\n` +
         `Cap: ${deal.volume_daily} leads/day. Lead rejected silently.`
@@ -157,20 +261,16 @@ export async function POST(req: Request) {
   }
   const country = countryRaw.toUpperCase();
 
-  // ── Validate click_id format ──────────────────────────────────────────────
   const rawClickId = typeof body.click_id === "string" ? body.click_id.trim() : null;
-  const click_id = rawClickId && isValidClickId(rawClickId) ? rawClickId : null;
+  const click_id   = rawClickId && isValidClickId(rawClickId) ? rawClickId : null;
 
-  // Deal-level test_mode overrides the per-lead flag — if the deal is in test mode,
-  // every lead is a test lead regardless of what the caller sends.
   const isTest = body.is_test === true || deal.test_mode === true;
 
-  // ── Traffic quality checks (non-blocking — flag only) ────────────────────
+  // ── Traffic quality checks (non-blocking) ────────────────────────────────
   const qualityFlags: string[] = [];
 
   if (!isTest) {
-    // Duplicate email check: same email → same deal within 24 hours
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const oneDayAgo  = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count: emailDupCount } = await admin
       .from("leads")
       .select("id", { count: "exact", head: true })
@@ -179,13 +279,10 @@ export async function POST(req: Request) {
       .eq("is_test", false)
       .gte("created_at", oneDayAgo);
 
-    if ((emailDupCount ?? 0) > 0) {
-      qualityFlags.push("duplicate_email_24h");
-    }
+    if ((emailDupCount ?? 0) > 0) qualityFlags.push("duplicate_email_24h");
 
-    // Duplicate IP check: same IP → same deal within 1 hour
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const leadIp = typeof body.ip === "string" ? body.ip : ip;
+    const leadIp     = typeof body.ip === "string" ? body.ip : ip;
     const { count: ipDupCount } = await admin
       .from("leads")
       .select("id", { count: "exact", head: true })
@@ -194,30 +291,28 @@ export async function POST(req: Request) {
       .eq("is_test", false)
       .gte("created_at", oneHourAgo);
 
-    if ((ipDupCount ?? 0) > 0) {
-      qualityFlags.push("duplicate_ip_1h");
-    }
+    if ((ipDupCount ?? 0) > 0) qualityFlags.push("duplicate_ip_1h");
   }
 
   // ── Insert lead record ────────────────────────────────────────────────────
   const { data: lead, error: leadErr } = await admin
     .from("leads")
     .insert({
-      deal_id: apiKey.deal_id,
+      deal_id:    apiKey.deal_id,
       partner_id: apiKey.partner_id,
       api_key_id: apiKey.id,
       first_name: typeof body.first_name === "string" ? body.first_name : null,
-      last_name: typeof body.last_name === "string" ? body.last_name : null,
+      last_name:  typeof body.last_name  === "string" ? body.last_name  : null,
       email,
       phone,
       country,
-      ip: typeof body.ip === "string" ? body.ip : ip,
+      ip:      typeof body.ip === "string" ? body.ip : ip,
       click_id,
-      sub1: typeof body.sub1 === "string" ? body.sub1 : null,
-      sub2: typeof body.sub2 === "string" ? body.sub2 : null,
-      sub3: typeof body.sub3 === "string" ? body.sub3 : null,
+      sub1:    typeof body.sub1 === "string" ? body.sub1 : null,
+      sub2:    typeof body.sub2 === "string" ? body.sub2 : null,
+      sub3:    typeof body.sub3 === "string" ? body.sub3 : null,
       is_test: isTest,
-      status: "received",
+      status:  "received",
     })
     .select("id")
     .single();
@@ -227,23 +322,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to create lead" }, { status: 500 });
   }
 
-  // Log inbound event — include quality flags for admin visibility
   await admin.from("lead_events").insert({
-    lead_id: lead.id,
-    direction: "inbound",
+    lead_id:    lead.id,
+    direction:  "inbound",
     event_type: "lead_received",
     payload: {
       email,
-      first_name: body.first_name,
-      last_name: body.last_name,
-      phone: body.phone,
-      country: body.country,
+      first_name:    body.first_name,
+      last_name:     body.last_name,
+      phone:         body.phone,
+      country:       body.country,
       click_id,
       quality_flags: qualityFlags.length > 0 ? qualityFlags : undefined,
     },
   });
 
-  // Alert admin if quality flags raised — awaited so Vercel doesn't kill it
   if (qualityFlags.length > 0) {
     await sendTelegramMessage(
       `⚠️ Lead quality flags — deal ${apiKey.deal_id.slice(0, 8)}\n` +
@@ -252,48 +345,41 @@ export async function POST(req: Request) {
     ).catch(() => {});
   }
 
-  // ── Relay to buyer CRM ────────────────────────────────────────────────────
+  // ── Relay + respond ───────────────────────────────────────────────────────
   if (!isTest) {
     const result = await relayLead(lead.id, apiKey.deal_id, {
       email,
       first_name: typeof body.first_name === "string" ? body.first_name : undefined,
-      last_name: typeof body.last_name === "string" ? body.last_name : undefined,
+      last_name:  typeof body.last_name  === "string" ? body.last_name  : undefined,
       phone,
       country,
-      ip: typeof body.ip === "string" ? body.ip : ip,
+      ip:       typeof body.ip === "string" ? body.ip : ip,
       click_id: click_id ?? undefined,
-      sub1: typeof body.sub1 === "string" ? body.sub1 : undefined,
-      sub2: typeof body.sub2 === "string" ? body.sub2 : undefined,
-      sub3: typeof body.sub3 === "string" ? body.sub3 : undefined,
+      sub1:     typeof body.sub1 === "string" ? body.sub1 : undefined,
+      sub2:     typeof body.sub2 === "string" ? body.sub2 : undefined,
+      sub3:     typeof body.sub3 === "string" ? body.sub3 : undefined,
     });
 
-    const isParked = result.relay_error === "parked";
-    if (isParked) {
-      // Notify admin — awaited so Vercel doesn't kill it before it fires
+    if (result.relay_error === "parked") {
       await sendTelegramMessage(
         `🅿️ Lead parked — deal ${apiKey.deal_id.slice(0, 8)}\n` +
         `Email: ${email}\nNo active buyer integration. Configure one at /portal/admin/integrations`
       ).catch(() => {});
     }
 
-    // Blind brokerage: always return "in_progress" regardless of internal state
     return NextResponse.json({
-      lead_id: lead.id,
-      status: "in_progress",
-      buyer_lead_id: result.buyer_lead_id ?? null,
+      lead_id:      lead.id,
+      status:       "in_progress",
       redirect_url: result.redirect_url ?? null,
     });
   }
 
   // Test lead — skip relay
-  await admin
-    .from("leads")
-    .update({ status: "received" })
-    .eq("id", lead.id);
+  await admin.from("leads").update({ status: "received" }).eq("id", lead.id);
 
   return NextResponse.json({
     lead_id: lead.id,
-    status: "in_progress",
-    message: "Test lead accepted — not relayed to buyer CRM",
+    status:  "in_progress",
+    message: "Test lead accepted",
   });
 }

@@ -51,7 +51,7 @@ export async function GET(
 
   const { data: lead } = await admin
     .from("leads")
-    .select("id, deal_id, status, buyer_lead_id, redirect_url, relayed_at, ftd_at, created_at, is_test")
+    .select("id, deal_id, status, redirect_url, ftd_at, created_at, is_test")
     .eq("id", id)
     .eq("deal_id", apiKey.deal_id) // enforce ownership
     .single();
@@ -71,13 +71,11 @@ export async function GET(
   }
 
   return NextResponse.json({
-    lead_id: lead.id,
-    status: sanitizeStatus(lead.status),
-    buyer_lead_id: lead.buyer_lead_id,
+    lead_id:      lead.id,
+    status:       sanitizeStatus(lead.status),
     redirect_url: lead.redirect_url,
-    relayed_at: lead.relayed_at,
-    ftd_at: lead.ftd_at,
-    is_test: lead.is_test,
-    created_at: lead.created_at,
+    ftd_at:       lead.ftd_at,
+    is_test:      lead.is_test,
+    created_at:   lead.created_at,
   });
 }
