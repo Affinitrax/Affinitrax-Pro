@@ -28,7 +28,6 @@ const CURL_STATUS = `curl ${BASE}/api/v1/leads/LEAD_ID \\
 const RESPONSE_OK = `{
   "lead_id": "a3f1c2d4-...",
   "status": "in_progress",
-  "buyer_lead_id": "12345",
   "redirect_url": null
 }`;
 
@@ -200,7 +199,7 @@ export default function SellerApiDocs() {
             <h1 className="text-3xl font-bold text-white font-display mb-3">Seller API Reference</h1>
             <p className="text-[#94a3b8] text-base leading-relaxed max-w-2xl">
               Submit leads directly to Affinitrax via HTTP. Your leads are authenticated, validated, and
-              relayed to the buyer&apos;s CRM automatically. You get postbacks when conversions are confirmed.
+              processed automatically. You get postbacks when conversions are confirmed.
             </p>
             <div className="mt-5 flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2 px-4 py-2 glass rounded-lg border border-white/7">
@@ -244,9 +243,8 @@ export default function SellerApiDocs() {
               <code className="text-white font-mono text-sm">/api/v1/leads</code>
             </div>
             <p className="text-[#94a3b8] text-sm leading-relaxed">
-              Sends a lead to Affinitrax. The lead is validated, stored, and immediately relayed to the
-              buyer&apos;s CRM. The response includes the lead ID you should store for status checks and
-              postback matching.
+              Sends a lead to Affinitrax. The lead is validated, stored, and processed automatically.
+              The response includes the lead ID you should store for status checks and postback matching.
             </p>
             <CodeBlock label="cURL example" code={CURL_SUBMIT} />
 
@@ -291,7 +289,7 @@ export default function SellerApiDocs() {
           {/* Postbacks */}
           <Section id="postbacks" title="Postbacks (conversion tracking)">
             <p className="text-[#94a3b8] text-sm leading-relaxed">
-              When a buyer confirms a conversion (FTD, deposit, etc.), Affinitrax fires a postback to
+              When a conversion is confirmed (FTD, deposit, etc.), Affinitrax fires a postback to
               your configured URL. You must provide your postback URL to your Affinitrax account manager
               so it can be set up in the system.
             </p>
