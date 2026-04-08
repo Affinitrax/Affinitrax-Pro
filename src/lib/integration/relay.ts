@@ -40,6 +40,7 @@ type DealIntegration = {
   response_redirect_url_path: string | null;
   allowed_geos: string[] | null;
   priority: number;
+  daily_cap: number | null;
 }
 
 
@@ -153,20 +154,45 @@ export async function relayLead(
     .eq("status", "active")
     .order("priority", { ascending: true });
 
-  const leadCountry = payload.country?.toUpperCase() ?? "";
-  const integration = (integrations ?? []).find(
-    (i) => i.allowed_geos === null || (Array.isArray(i.allowed_geos) && i.allowed_geos.includes(leadCountry))
-  ) ?? null;
-
-  if (intErr || !integration) {
-    // No matching integration — park the lead (safe in DB, replayable later)
-    const geoReason = `No active buyer integration for geo: ${payload.country ?? "unknown"}`;
+  if (intErr) {
     await admin
       .from("leads")
       .update({ status: "parked", relay_error: null })
       .eq("id", leadId);
     await logEvent(leadId, "inbound", "lead_parked", {
-      payload: { reason: geoReason },
+      payload: { reason: `No active buyer integration for geo: ${payload.country ?? "unknown"}` },
+    });
+    return { success: false, relay_error: "parked" };
+  }
+
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const leadCountry = (payload.country ?? "").toUpperCase();
+
+  let integration: DealIntegration | null = null;
+  for (const candidate of integrations ?? []) {
+    // Geo check
+    const geoOk = !candidate.allowed_geos || candidate.allowed_geos.includes(leadCountry);
+    if (!geoOk) continue;
+
+    // Daily cap check
+    if (candidate.daily_cap !== null) {
+      const { count: todayCount } = await admin
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("integration_id", candidate.id)
+        .gte("created_at", todayStart.toISOString());
+      if ((todayCount ?? 0) >= candidate.daily_cap) continue; // cap hit — try next
+    }
+
+    integration = candidate;
+    break;
+  }
+
+  if (!integration) {
+    await admin.from("leads").update({ status: "parked", relay_error: null }).eq("id", leadId);
+    await logEvent(leadId, "inbound", "lead_parked", {
+      payload: { reason: `No active buyer integration for geo: ${leadCountry || "unknown"} (all caps hit or no match)` },
     });
     return { success: false, relay_error: "parked" };
   }
@@ -283,7 +309,7 @@ export async function relayLead(
 
   const success = !relayError && responseStatus !== null && responseStatus < 300;
 
-  // Update lead record
+  // Update lead record (integration_id stamped on both success and fail to count against the cap)
   await admin
     .from("leads")
     .update({
@@ -292,6 +318,7 @@ export async function relayLead(
       redirect_url: redirectUrl,
       relay_error: relayError,
       relayed_at: success ? new Date().toISOString() : null,
+      integration_id: integration.id,
     })
     .eq("id", leadId);
 

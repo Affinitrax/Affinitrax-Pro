@@ -22,6 +22,7 @@ type Integration = {
   mappings: FieldMapping[];
   allowed_geos: string[] | null;
   priority: number;
+  daily_cap: number | null;
 };
 
 type FieldMapping = {
@@ -110,6 +111,7 @@ export default function IntegrationDetailPage() {
         status: intData.status,
         allowed_geos: intData.allowed_geos ?? null,
         priority: intData.priority ?? 10,
+        daily_cap: intData.daily_cap ?? null,
       });
       setMappings(intData.mappings ?? []);
 
@@ -421,6 +423,17 @@ export default function IntegrationDetailPage() {
                   className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
                 />
                 <p className="text-[#475569] text-xs mt-1">Lower number = higher priority when multiple integrations match a geo.</p>
+              </div>
+              <div>
+                <label className="block text-xs text-[#94a3b8] mb-1.5">Daily Cap (leads/day)</label>
+                <input
+                  type="number"
+                  placeholder="Leave empty for no cap"
+                  value={form.daily_cap ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, daily_cap: e.target.value ? parseInt(e.target.value, 10) : null }))}
+                  className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
+                />
+                <p className="text-[#475569] text-xs mt-1">Max leads relayed to this buyer per calendar day (UTC). Leave empty for unlimited.</p>
               </div>
             </div>
           </div>
