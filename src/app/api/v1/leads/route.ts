@@ -40,8 +40,8 @@ import { relayLead } from "@/lib/integration/relay";
 import { sendTelegramMessage } from "@/lib/telegram";
 
 /** Maps internal relay states to the partner-safe status surface. */
-function sanitizeStatus(s: string): string {
-  if (s === "ftd")      return "ftd";
+function sanitizeStatus(s: string, ftdLabel = "ftd"): string {
+  if (s === "ftd")      return ftdLabel;
   if (s === "rejected") return "rejected";
   if (s === "relayed")  return "relayed";
   return "in_progress"; // received / relaying / parked / failed
@@ -147,9 +147,14 @@ export async function GET(req: Request) {
     .order("created_at", { ascending: false })
     .range(skip, skip + take - 1);
 
+  // Deal-specific FTD label override
+  const ftdLabel = apiKey.deal_id === "1fa74adb-46f7-4fa5-bb91-ef921d12f489"
+    ? "call_back"
+    : "ftd";
+
   const sanitized = (leads ?? []).map((l) => ({
     lead_id:    l.id,
-    status:     sanitizeStatus(l.status as string),
+    status:     sanitizeStatus(l.status as string, ftdLabel),
     created_at: l.created_at,
     email:      l.email,
     click_id:   l.click_id,

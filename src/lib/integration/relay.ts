@@ -14,6 +14,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "./crypto";
 import { applyFieldMappings, extractByPath } from "./field-mapper";
 import { firePostback } from "./postback-relay";
+import { ProxyAgent } from "undici";
+
+/** Outbound fetch — routed through Fixie static-IP proxy if FIXIE_URL is set. */
+const FIXIE_URL = process.env.FIXIE_URL;
+function proxyFetch(url: string, init: RequestInit): Promise<Response> {
+  if (FIXIE_URL) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return fetch(url, { ...init, dispatcher: new ProxyAgent(FIXIE_URL) } as any);
+  }
+  return fetch(url, init);
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -224,7 +235,7 @@ export async function relayLead(
   let redirectUrl: string | undefined;
 
   try {
-    const resp = await fetch(url, {
+    const resp = await proxyFetch(url, {
       method: "POST",
       headers,
       body: bodyStr,
