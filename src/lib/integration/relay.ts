@@ -14,14 +14,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "./crypto";
 import { applyFieldMappings, extractByPath } from "./field-mapper";
 import { firePostback } from "./postback-relay";
-import { ProxyAgent } from "undici";
+import { fetch as undiciFetch, ProxyAgent } from "undici";
 
 /** Outbound fetch — routed through Fixie static-IP proxy if FIXIE_URL is set. */
 const FIXIE_URL = process.env.FIXIE_URL;
 function proxyFetch(url: string, init: RequestInit): Promise<Response> {
   if (FIXIE_URL) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return fetch(url, { ...init, dispatcher: new ProxyAgent(FIXIE_URL) } as any);
+    // Use undici's own fetch so the dispatcher/ProxyAgent option is honoured.
+    // Global Node.js fetch silently ignores the dispatcher option.
+    return undiciFetch(url, {
+      ...init,
+      dispatcher: new ProxyAgent(FIXIE_URL),
+    } as Parameters<typeof undiciFetch>[1]) as unknown as Promise<Response>;
   }
   return fetch(url, init);
 }
@@ -41,6 +45,8 @@ type DealIntegration = {
   allowed_geos: string[] | null;
   priority: number;
   daily_cap: number | null;
+  relay_mode: "instant" | "throttled";
+  throttle_rate: number; // leads per hour
 }
 
 
@@ -135,7 +141,9 @@ async function logEvent(
 export async function relayLead(
   leadId: string,
   dealId: string,
-  payload: LeadPayload
+  payload: LeadPayload,
+  /** When set, skip integration selection and throttle — used by the cron worker */
+  preassignedIntegrationId?: string
 ): Promise<RelayResult> {
   const admin = createAdminClient();
 
@@ -145,66 +153,92 @@ export async function relayLead(
     .update({ status: "relaying" })
     .eq("id", leadId);
 
-  // 1. Load integration config — fetch all active integrations ordered by priority,
-  //    then pick the first whose geo filter matches the lead's country.
-  const { data: integrations, error: intErr } = await admin
-    .from("deal_integrations")
-    .select("*")
-    .eq("deal_id", dealId)
-    .eq("status", "active")
-    .order("priority", { ascending: true });
-
-  if (intErr) {
-    await admin
-      .from("leads")
-      .update({ status: "parked", relay_error: null })
-      .eq("id", leadId);
-    await logEvent(leadId, "inbound", "lead_parked", {
-      payload: { reason: `No active buyer integration for geo: ${payload.country ?? "unknown"}` },
-    });
-    return { success: false, relay_error: "parked" };
-  }
-
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-  const leadCountry = (payload.country ?? "").toUpperCase();
-
   let integration: DealIntegration | null = null;
-  for (const candidate of integrations ?? []) {
-    // Geo check
-    const geoOk = !candidate.allowed_geos || candidate.allowed_geos.includes(leadCountry);
-    if (!geoOk) continue;
 
-    // Daily cap check
-    if (candidate.daily_cap !== null) {
-      const { count: todayCount } = await admin
+  if (preassignedIntegrationId) {
+    // Cron path: load the specific integration directly, skip geo/cap/throttle checks
+    const { data } = await admin
+      .from("deal_integrations")
+      .select("*")
+      .eq("id", preassignedIntegrationId)
+      .single();
+    integration = data ?? null;
+
+    if (!integration) {
+      await admin.from("leads").update({ status: "parked", relay_error: null }).eq("id", leadId);
+      return { success: false, relay_error: "parked" };
+    }
+  } else {
+    // Normal path: find best matching active integration
+    const { data: integrations, error: intErr } = await admin
+      .from("deal_integrations")
+      .select("*")
+      .eq("deal_id", dealId)
+      .eq("status", "active")
+      .order("priority", { ascending: true });
+
+    if (intErr) {
+      await admin
         .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("integration_id", candidate.id)
-        .gte("created_at", todayStart.toISOString());
-      if ((todayCount ?? 0) >= candidate.daily_cap) continue; // cap hit — try next
+        .update({ status: "parked", relay_error: null })
+        .eq("id", leadId);
+      await logEvent(leadId, "inbound", "lead_parked", {
+        payload: { reason: `No active buyer integration for geo: ${payload.country ?? "unknown"}` },
+      });
+      return { success: false, relay_error: "parked" };
     }
 
-    integration = candidate;
-    break;
-  }
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const leadCountry = (payload.country ?? "").toUpperCase();
 
-  if (!integration) {
-    await admin.from("leads").update({ status: "parked", relay_error: null }).eq("id", leadId);
-    await logEvent(leadId, "inbound", "lead_parked", {
-      payload: { reason: `No active buyer integration for geo: ${leadCountry || "unknown"} (all caps hit or no match)` },
-    });
-    return { success: false, relay_error: "parked" };
-  }
+    for (const candidate of integrations ?? []) {
+      const geoOk = !candidate.allowed_geos || candidate.allowed_geos.includes(leadCountry);
+      if (!geoOk) continue;
 
-  // 2. Load field mappings
+      if (candidate.daily_cap !== null) {
+        const { count: todayCount } = await admin
+          .from("leads")
+          .select("id", { count: "exact", head: true })
+          .eq("integration_id", candidate.id)
+          .gte("created_at", todayStart.toISOString());
+        if ((todayCount ?? 0) >= candidate.daily_cap) continue;
+      }
+
+      integration = candidate;
+      break;
+    }
+
+    if (!integration) {
+      const leadCountry = (payload.country ?? "").toUpperCase();
+      await admin.from("leads").update({ status: "parked", relay_error: null }).eq("id", leadId);
+      await logEvent(leadId, "inbound", "lead_parked", {
+        payload: { reason: `No active buyer integration for geo: ${leadCountry || "unknown"} (all caps hit or no match)` },
+      });
+      return { success: false, relay_error: "parked" };
+    }
+
+    // 2. If throttled mode — queue and let cron worker relay it later
+    if (integration.relay_mode === "throttled") {
+      await admin
+        .from("leads")
+        .update({ status: "queued", integration_id: integration.id })
+        .eq("id", leadId);
+      await logEvent(leadId, "inbound", "lead_queued", {
+        payload: { integration_id: integration.id, throttle_rate: integration.throttle_rate },
+      });
+      return { success: true, relay_error: undefined };
+    }
+  } // end normal path
+
+  // 3. Load field mappings
   const { data: mappings } = await admin
     .from("integration_field_mappings")
     .select("*")
     .eq("integration_id", integration.id)
     .order("sort_order");
 
-  // 3. Decrypt buyer credential
+  // 4. Decrypt buyer credential
   let credential: string | null = null;
   if (integration.auth_header_value_enc) {
     try {
@@ -216,7 +250,7 @@ export async function relayLead(
     }
   }
 
-  // 4. Apply field mappings
+  // 5. Apply field mappings
   const { mapped, missingRequired } = applyFieldMappings(
     payload as Record<string, string | null | undefined>,
     mappings ?? []
@@ -228,7 +262,7 @@ export async function relayLead(
     return { success: false, relay_error: errMsg };
   }
 
-  // 5. Build and fire request to buyer CRM
+  // 6. Build and fire request to buyer CRM
   const url = buildUrl(integration, credential);
   const headers: Record<string, string> = {
     ...buildHeaders(integration, credential),
@@ -322,7 +356,7 @@ export async function relayLead(
     })
     .eq("id", leadId);
 
-  // 6. Fire seller postback for "lead" event (if configured)
+  // 7. Fire seller postback for "lead" event (if configured)
   if (success) {
     const { data: postbackConfigs } = await admin
       .from("deal_postback_configs")
