@@ -4,7 +4,7 @@ import { sendTelegramMessage } from "@/lib/telegram";
 import { Resend } from "resend";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const getResend = () => new Resend(process.env.RESEND_API_KEY);
 const FROM =
   process.env.RESEND_DOMAIN_VERIFIED?.trim() === "true"
     ? "Affinitrax <info@affinitrax.com>"
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
 
     // ── Admin email notification ──────────────────────────────────────────
     // Must be awaited — Vercel serverless kills fire-and-forget before completion
-    await resend.emails
+    await getResend().emails
       .send({
         from: FROM,
         to: NOTIFY_TO,
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
       .catch((err) => console.error("[Resend] Application email error:", err));
 
     // ── Confirmation email to applicant ───────────────────────────────────
-    await resend.emails
+    await getResend().emails
       .send({
         from: FROM,
         to: email,

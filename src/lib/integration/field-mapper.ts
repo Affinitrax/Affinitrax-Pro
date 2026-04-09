@@ -9,7 +9,8 @@ export type Transform =
   | "uppercase"
   | "lowercase"
   | "e164_phone"
-  | "strip_plus";
+  | "strip_plus"
+  | string; // allows "strip_prefix:<value>" e.g. "strip_prefix:49"
 
 export interface FieldMapping {
   affinitrax_field: string;
@@ -38,6 +39,13 @@ function applyTransform(value: string, transform: Transform): string {
     case "strip_plus":
       return value.startsWith("+") ? value.slice(1) : value;
     default:
+      // strip_prefix:<digits> — remove leading + and the specified country dial code
+      // e.g. transform="strip_prefix:49" on "+4915120297489" → "15120297489"
+      if (transform.startsWith("strip_prefix:")) {
+        const prefix = transform.slice("strip_prefix:".length);
+        const stripped = value.startsWith("+") ? value.slice(1) : value;
+        return stripped.startsWith(prefix) ? stripped.slice(prefix.length) : stripped;
+      }
       return value;
   }
 }

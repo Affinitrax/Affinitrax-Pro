@@ -23,7 +23,7 @@ export async function GET() {
   const admin = createAdminClient();
   const { data } = await admin
     .from("deal_integrations")
-    .select("id, deal_id, name, endpoint_url, auth_type, content_type, status, allowed_geos, priority, daily_cap, created_at, updated_at")
+    .select("id, deal_id, name, endpoint_url, auth_type, content_type, status, allowed_geos, priority, daily_cap, relay_mode, throttle_rate, created_at, updated_at")
     .order("created_at", { ascending: false });
 
   return NextResponse.json(data ?? []);
@@ -75,6 +75,8 @@ export async function POST(req: Request) {
       allowed_geos: allowed_geos ?? null,
       priority: priority ?? 10,
       daily_cap: body.daily_cap ?? null,
+      relay_mode: body.relay_mode ?? "instant",
+      throttle_rate: body.throttle_rate ?? 20,
     })
     .select("id")
     .single();

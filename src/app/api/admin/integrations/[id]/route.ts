@@ -29,7 +29,7 @@ export async function GET(
 
   const { data: integration } = await admin
     .from("deal_integrations")
-    .select("id, deal_id, name, endpoint_url, auth_type, auth_header_name, content_type, response_lead_id_path, response_redirect_url_path, ip_whitelist_required, allowed_ips, notes, status, allowed_geos, priority, daily_cap, created_at, updated_at")
+    .select("id, deal_id, name, endpoint_url, auth_type, auth_header_name, content_type, response_lead_id_path, response_redirect_url_path, ip_whitelist_required, allowed_ips, notes, status, allowed_geos, priority, daily_cap, relay_mode, throttle_rate, created_at, updated_at")
     .eq("id", id)
     .single();
 
@@ -61,7 +61,7 @@ export async function PATCH(
     "name", "endpoint_url", "auth_type", "auth_header_name",
     "content_type", "response_lead_id_path", "response_redirect_url_path",
     "ip_whitelist_required", "allowed_ips", "notes", "status",
-    "allowed_geos", "priority", "daily_cap",
+    "allowed_geos", "priority", "daily_cap", "relay_mode", "throttle_rate",
   ];
 
   for (const key of allowed) {

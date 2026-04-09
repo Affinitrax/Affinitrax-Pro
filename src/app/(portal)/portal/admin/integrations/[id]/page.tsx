@@ -23,6 +23,8 @@ type Integration = {
   allowed_geos: string[] | null;
   priority: number;
   daily_cap: number | null;
+  relay_mode: "instant" | "throttled";
+  throttle_rate: number;
 };
 
 type FieldMapping = {
@@ -90,6 +92,8 @@ export default function IntegrationDetailPage() {
   const [generatingKey, setGeneratingKey] = useState(false);
   const [parkedCount, setParkedCount] = useState<number | null>(null);
   const [replaying, setReplaying] = useState(false);
+  const [testRelaying, setTestRelaying] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; buyer_lead_id: string | null; relay_error: string | null; lead_country: string | null; lead_ip: string | null } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -112,6 +116,8 @@ export default function IntegrationDetailPage() {
         allowed_geos: intData.allowed_geos ?? null,
         priority: intData.priority ?? 10,
         daily_cap: intData.daily_cap ?? null,
+        relay_mode: intData.relay_mode ?? "instant",
+        throttle_rate: intData.throttle_rate ?? 20,
       });
       setMappings(intData.mappings ?? []);
 
@@ -201,6 +207,25 @@ export default function IntegrationDetailPage() {
     setApiKeys((prev) => prev.map((k) => k.id === keyId ? { ...k, status: "revoked" as const } : k));
   }
 
+  async function testRelay() {
+    setTestRelaying(true);
+    setTestResult(null);
+    setMsg(null);
+    const res = await fetch(`/api/admin/integrations/${id}/test-relay`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setTestResult(data);
+      if (data.success) {
+        setMsg({ type: "ok", text: `Test lead accepted ✓ buyer_lead_id: ${data.buyer_lead_id ?? "—"} (${data.lead_country}, IP: ${data.lead_ip})` });
+      } else {
+        setMsg({ type: "err", text: `Test lead rejected: ${data.relay_error ?? "unknown error"}` });
+      }
+    } else {
+      setMsg({ type: "err", text: data.error ?? "Test relay failed" });
+    }
+    setTestRelaying(false);
+  }
+
   async function replayParked() {
     setReplaying(true);
     setMsg(null);
@@ -254,23 +279,41 @@ export default function IntegrationDetailPage() {
 
       {/* ── Parked leads banner ────────────────────────────────────────────── */}
       {parkedCount !== null && parkedCount > 0 && (
-        <div className="flex items-center justify-between px-5 py-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-          <div>
-            <p className="text-amber-400 font-semibold text-sm">
-              {parkedCount} parked lead{parkedCount !== 1 ? "s" : ""} waiting
-            </p>
-            <p className="text-amber-400/70 text-xs mt-0.5">
-              These leads arrived before the buyer integration was active. Replay them now to forward to the CRM.
-            </p>
+        <div className="px-5 py-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-amber-400 font-semibold text-sm">
+                {parkedCount} parked lead{parkedCount !== 1 ? "s" : ""} waiting
+              </p>
+              <p className="text-amber-400/70 text-xs mt-0.5">
+                These leads arrived before the buyer integration was active. Test first, then replay all.
+              </p>
+            </div>
+            <div className="flex gap-2 ml-4">
+              <button
+                onClick={testRelay}
+                disabled={testRelaying}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 whitespace-nowrap bg-[#13131f] border border-white/20 hover:border-[#00d4ff]/40 transition-colors"
+              >
+                {testRelaying ? "Testing…" : "Send 1 Test Lead"}
+              </button>
+              <button
+                onClick={replayParked}
+                disabled={replaying || integration?.status !== "active"}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 whitespace-nowrap"
+                style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)" }}
+              >
+                {replaying ? "Replaying…" : `Replay All ${parkedCount}`}
+              </button>
+            </div>
           </div>
-          <button
-            onClick={replayParked}
-            disabled={replaying || integration?.status !== "active"}
-            className="ml-4 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 whitespace-nowrap"
-            style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)" }}
-          >
-            {replaying ? "Replaying…" : `Replay ${parkedCount} lead${parkedCount !== 1 ? "s" : ""}`}
-          </button>
+          {testResult && (
+            <div className={`text-xs font-mono px-3 py-2 rounded-lg ${testResult.success ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+              {testResult.success
+                ? `✓ Accepted — buyer_lead_id: ${testResult.buyer_lead_id ?? "—"} | geo: ${testResult.lead_country} | ip: ${testResult.lead_ip}`
+                : `✗ Rejected — ${testResult.relay_error}`}
+            </div>
+          )}
         </div>
       )}
 
@@ -435,6 +478,47 @@ export default function IntegrationDetailPage() {
                 />
                 <p className="text-[#475569] text-xs mt-1">Max leads relayed to this buyer per calendar day (UTC). Leave empty for unlimited.</p>
               </div>
+              {/* Relay Mode */}
+              <div className="col-span-2">
+                <label className="block text-xs text-[#94a3b8] mb-2">Relay Mode</label>
+                <div className="flex gap-3">
+                  {(["instant", "throttled"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, relay_mode: mode }))}
+                      className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+                        form.relay_mode === mode
+                          ? mode === "instant"
+                            ? "bg-[#00d4ff]/10 border-[#00d4ff]/40 text-[#00d4ff]"
+                            : "bg-amber-500/10 border-amber-500/40 text-amber-400"
+                          : "bg-[#13131f] border-white/10 text-[#475569] hover:border-white/20"
+                      }`}
+                    >
+                      {mode === "instant" ? "⚡ Instant" : "🕐 Throttled"}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[#475569] text-xs mt-1.5">
+                  {form.relay_mode === "instant"
+                    ? "Leads are relayed to the buyer immediately as they arrive."
+                    : "Leads are queued and dripped to the buyer at the configured rate to mimic live traffic."}
+                </p>
+              </div>
+              {form.relay_mode === "throttled" && (
+                <div>
+                  <label className="block text-xs text-[#94a3b8] mb-1.5">Throttle Rate (leads/hour)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={form.throttle_rate}
+                    onChange={(e) => setForm((f) => ({ ...f, throttle_rate: parseInt(e.target.value, 10) || 20 }))}
+                    className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-amber-500/40"
+                  />
+                  <p className="text-[#475569] text-xs mt-1">e.g. 10 = ~1 lead every 6 minutes spread across the hour.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

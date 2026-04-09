@@ -70,6 +70,7 @@ async function handlePostback(request: NextRequest): Promise<Response> {
 
     const deal_id = getParam("deal_id");
     const click_id = getParam("click_id");
+    const buyer_lead_id = getParam("buyer_lead_id"); // BetLeads-style: leadRequestID
     const event_type = getParam("event_type") || "conversion";
     const sub_id = getParam("sub_id");
     const geo = getParam("geo");
@@ -213,19 +214,25 @@ async function handlePostback(request: NextRequest): Promise<Response> {
     };
     const mappedEvent = eventTypeMap[safeEventType];
 
-    if (mappedEvent && click_id) {
+    if (mappedEvent && (click_id || buyer_lead_id)) {
       try {
         const admin2 = createAdminClient();
 
-        // Find lead by click_id + deal_id
-        const { data: lead } = await admin2
+        // Find lead by buyer_lead_id (BetLeads-style) OR click_id + deal_id
+        let leadQuery = admin2
           .from("leads")
-          .select("id, sub1, sub2, sub3, buyer_lead_id")
+          .select("id, sub1, sub2, sub3, buyer_lead_id, click_id")
           .eq("deal_id", deal_id)
-          .eq("click_id", click_id)
           .order("created_at", { ascending: false })
-          .limit(1)
-          .single();
+          .limit(1);
+
+        if (buyer_lead_id) {
+          leadQuery = leadQuery.eq("buyer_lead_id", buyer_lead_id);
+        } else {
+          leadQuery = leadQuery.eq("click_id", click_id!);
+        }
+
+        const { data: lead } = await leadQuery.single();
 
         if (lead) {
           // Update FTD timestamp if applicable
@@ -248,7 +255,7 @@ async function handlePostback(request: NextRequest): Promise<Response> {
             for (const cfg of postbackConfigs) {
               const result = await firePostback(cfg, {
                 lead_id: lead.id,
-                click_id: click_id ?? undefined,
+                click_id: lead.click_id ?? click_id ?? undefined,
                 buyer_lead_id: lead.buyer_lead_id ?? undefined,
                 sub1: lead.sub1 ?? undefined,
                 sub2: lead.sub2 ?? undefined,

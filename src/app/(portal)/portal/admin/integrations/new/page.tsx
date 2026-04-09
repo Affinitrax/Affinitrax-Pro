@@ -26,6 +26,8 @@ export default function NewIntegrationPage() {
     allowed_geos: "" as string,  // comma-separated ISO codes, empty = all geos
     priority: "10",
     daily_cap: "",
+    relay_mode: "instant" as "instant" | "throttled",
+    throttle_rate: "20",
   });
 
   useEffect(() => {
@@ -55,6 +57,8 @@ export default function NewIntegrationPage() {
           : null,
         priority: parseInt(form.priority, 10) || 10,
         daily_cap: form.daily_cap ? parseInt(form.daily_cap, 10) : null,
+        relay_mode: form.relay_mode,
+        throttle_rate: parseInt(form.throttle_rate, 10) || 20,
       }),
     });
 
@@ -169,6 +173,48 @@ export default function NewIntegrationPage() {
             />
             <p className="text-[#475569] text-xs mt-1">Max leads relayed to this buyer per calendar day (UTC). Leave empty for unlimited.</p>
           </div>
+
+          {/* Relay Mode */}
+          <div className="col-span-2">
+            <label className="block text-xs text-[#94a3b8] mb-2">Relay Mode</label>
+            <div className="flex gap-3">
+              {(["instant", "throttled"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => set("relay_mode", mode)}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+                    form.relay_mode === mode
+                      ? mode === "instant"
+                        ? "bg-[#00d4ff]/10 border-[#00d4ff]/40 text-[#00d4ff]"
+                        : "bg-amber-500/10 border-amber-500/40 text-amber-400"
+                      : "bg-[#13131f] border-white/10 text-[#475569] hover:border-white/20"
+                  }`}
+                >
+                  {mode === "instant" ? "⚡ Instant" : "🕐 Throttled"}
+                </button>
+              ))}
+            </div>
+            <p className="text-[#475569] text-xs mt-1.5">
+              {form.relay_mode === "instant"
+                ? "Leads are relayed to the buyer immediately as they arrive."
+                : "Leads are queued and dripped to the buyer at the configured rate to mimic live traffic."}
+            </p>
+          </div>
+          {form.relay_mode === "throttled" && (
+            <div>
+              <label className="block text-xs text-[#94a3b8] mb-1.5">Throttle Rate (leads/hour)</label>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={form.throttle_rate}
+                onChange={(e) => set("throttle_rate", e.target.value)}
+                className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-amber-500/40"
+              />
+              <p className="text-[#475569] text-xs mt-1">e.g. 10 = ~1 lead every 6 minutes spread across the hour.</p>
+            </div>
+          )}
         </section>
 
         <section className="glass rounded-2xl p-6 border border-white/5 space-y-4">

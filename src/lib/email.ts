@@ -1,6 +1,8 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResend() {
+  return new Resend(process.env.RESEND_API_KEY);
+}
 
 const FROM = process.env.RESEND_DOMAIN_VERIFIED?.trim() === "true"
   ? "Affinitrax <info@affinitrax.com>"
@@ -23,7 +25,7 @@ function esc(text: string | undefined | null): string {
 
 export async function sendPartnerInvite(email: string, inviteUrl: string): Promise<void> {
   // inviteUrl is system-generated — no need to escape
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: FROM,
     to: email,
     replyTo: NOTIFY_TO,
@@ -76,7 +78,7 @@ export async function sendInquiryNotification(inquiry: {
   const tgHandle = tgRaw ? tgRaw.replace("@", "") : "";
 
   // Notify admin
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to: NOTIFY_TO,
     replyTo: inquiry.email,
@@ -105,7 +107,7 @@ export async function sendInquiryNotification(inquiry: {
   });
 
   // Confirm to sender
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to: inquiry.email,
     replyTo: NOTIFY_TO,
