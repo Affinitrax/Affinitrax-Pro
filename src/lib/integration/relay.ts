@@ -16,15 +16,22 @@ import { applyFieldMappings, extractByPath } from "./field-mapper";
 import { firePostback } from "./postback-relay";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 
-/** Outbound fetch — routed through Fixie static-IP proxy if FIXIE_URL is set. */
+/** Outbound fetch — routed through Contabo proxy if FIXIE_URL is set.
+ *  Uses undici's own fetch so ProxyAgent dispatcher is honoured.
+ *  headersTimeout/bodyTimeout set to 0 (no internal limit) — callers
+ *  control the deadline via AbortSignal.
+ */
 const FIXIE_URL = process.env.FIXIE_URL;
 function proxyFetch(url: string, init: RequestInit): Promise<Response> {
   if (FIXIE_URL) {
-    // Use undici's own fetch so the dispatcher/ProxyAgent option is honoured.
-    // Global Node.js fetch silently ignores the dispatcher option.
+    const dispatcher = new ProxyAgent({
+      uri: FIXIE_URL,
+      headersTimeout: 0,  // disable undici's 30s header-wait default
+      bodyTimeout: 0,     // disable undici's body-read timeout
+    });
     return undiciFetch(url, {
       ...init,
-      dispatcher: new ProxyAgent(FIXIE_URL),
+      dispatcher,
     } as Parameters<typeof undiciFetch>[1]) as unknown as Promise<Response>;
   }
   return fetch(url, init);
@@ -299,7 +306,7 @@ export async function relayLead(
       method: "POST",
       headers,
       body: bodyStr,
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(110_000), // 110s — BetLeads via proxy can take ~63s
     });
 
     responseStatus = resp.status;
