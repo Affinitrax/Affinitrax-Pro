@@ -96,8 +96,6 @@ export async function GET(request: NextRequest) {
     if (!queuedLeads || queuedLeads.length === 0) continue;
 
     for (const lead of queuedLeads) {
-      // Temporarily set back to 'relaying' so relay engine skips throttle check
-      // (integration is already assigned — relay engine will use it directly)
       await relayLead(lead.id, lead.deal_id, {
         email: lead.email,
         first_name: lead.first_name ?? undefined,
@@ -109,12 +107,34 @@ export async function GET(request: NextRequest) {
         sub1: lead.sub1 ?? undefined,
         sub2: lead.sub2 ?? undefined,
         sub3: lead.sub3 ?? undefined,
-      }, integration.id); // pass preassigned integration — skips throttle check
+      }, integration.id);
 
       totalProcessed++;
 
-      // Small random delay between leads (200–800ms) to avoid machine-gun pattern
       await new Promise((r) => setTimeout(r, 200 + Math.random() * 600));
+    }
+
+    // Auto-pause: if daily_cap is set and queue is now empty → flip to testing
+    // Prevents leads flowing again the next day without explicit re-activation.
+    const { data: intFull } = await admin
+      .from("deal_integrations")
+      .select("daily_cap")
+      .eq("id", integration.id)
+      .single();
+
+    if (intFull?.daily_cap !== null) {
+      const { count: remaining } = await admin
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("integration_id", integration.id)
+        .eq("status", "queued");
+
+      if ((remaining ?? 0) === 0) {
+        await admin
+          .from("deal_integrations")
+          .update({ status: "testing", updated_at: new Date().toISOString() })
+          .eq("id", integration.id);
+      }
     }
   }
 

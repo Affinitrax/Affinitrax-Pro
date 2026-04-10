@@ -93,6 +93,7 @@ export default function IntegrationDetailPage() {
   const [parkedCount, setParkedCount] = useState<number | null>(null);
   const [replaying, setReplaying] = useState(false);
   const [testRelaying, setTestRelaying] = useState(false);
+  const [togglingStatus, setTogglingStatus] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; buyer_lead_id: string | null; relay_error: string | null; lead_country: string | null; lead_ip: string | null } | null>(null);
 
   // Queue status (throttled relay live feed)
@@ -241,6 +242,23 @@ export default function IntegrationDetailPage() {
     setTestRelaying(false);
   }
 
+  async function togglePause() {
+    if (!integration) return;
+    setTogglingStatus(true);
+    const newStatus = integration.status === "active" ? "testing" : "active";
+    const res = await fetch(`/api/admin/integrations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    if (res.ok) {
+      setIntegration((prev) => prev ? { ...prev, status: newStatus } : prev);
+      setForm((f) => ({ ...f, status: newStatus }));
+      setMsg({ type: "ok", text: newStatus === "active" ? "Integration resumed — leads will flow." : "Integration paused — no leads will relay." });
+    }
+    setTogglingStatus(false);
+  }
+
   async function replayParked() {
     setReplaying(true);
     setMsg(null);
@@ -284,6 +302,18 @@ export default function IntegrationDetailPage() {
             <span className="text-[#334155] font-mono text-xs">deal: {integration.deal_id.slice(0, 8)}</span>
           </div>
         </div>
+        {/* Pause / Resume toggle */}
+        <button
+          onClick={togglePause}
+          disabled={togglingStatus}
+          className={`mt-6 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 flex items-center gap-2 ${
+            integration.status === "active"
+              ? "bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25"
+              : "bg-green-500/15 text-green-400 border border-green-500/30 hover:bg-green-500/25"
+          }`}
+        >
+          {togglingStatus ? "…" : integration.status === "active" ? "⏸ Pause" : "▶ Resume"}
+        </button>
       </div>
 
       {msg && (
