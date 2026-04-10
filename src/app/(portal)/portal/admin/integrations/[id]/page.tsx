@@ -492,7 +492,7 @@ export default function IntegrationDetailPage() {
             <p className="text-[#475569] text-xs mb-3">
               Send this URL to the buyer. When a lead converts, they hit it with <span className="font-mono text-[#64748b]">buyer_lead_id</span> to fire the FTD event back.
             </p>
-            {["ftd", "chargeback"].map((eventType) => {
+            {["ftd"].map((eventType) => {
               const url = `${typeof window !== "undefined" ? window.location.origin : "https://affinitrax.io"}/api/postback?deal_id=${integration.deal_id}&event_type=${eventType}&buyer_lead_id={id}`;
               const key = `postback_${eventType}`;
               return (
