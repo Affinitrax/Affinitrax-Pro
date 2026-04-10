@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -95,6 +95,12 @@ export default function IntegrationDetailPage() {
   const [testRelaying, setTestRelaying] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; buyer_lead_id: string | null; relay_error: string | null; lead_country: string | null; lead_ip: string | null } | null>(null);
 
+  // Queue status (throttled relay live feed)
+  type QueueLead = { id: string; email: string; country: string | null; status: string; buyer_lead_id: string | null; relay_error: string | null; relayed_at: string | null; created_at: string };
+  type QueueStatus = { queued: number; relayed_today: number; failed_today: number; daily_cap: number | null; throttle_rate: number; relay_mode: string; status: string; last_relayed_at: string | null; next_lead_in_seconds: number | null; recent: QueueLead[] };
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
+  const queuePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     async function load() {
       const intData: Integration = await fetch(`/api/admin/integrations/${id}`).then((r) => r.json());
@@ -131,6 +137,15 @@ export default function IntegrationDetailPage() {
       setLoading(false);
     }
     load();
+
+    // Poll queue status every 30s
+    async function refreshQueue() {
+      const res = await fetch(`/api/admin/integrations/${id}/queue-status`);
+      if (res.ok) setQueueStatus(await res.json());
+    }
+    refreshQueue();
+    queuePollRef.current = setInterval(refreshQueue, 30_000);
+    return () => { if (queuePollRef.current) clearInterval(queuePollRef.current); };
   }, [id, router]);
 
   async function saveIntegration() {
@@ -315,6 +330,90 @@ export default function IntegrationDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Queue Status ──────────────────────────────────────────────────── */}
+      {queueStatus && (queueStatus.queued > 0 || queueStatus.relayed_today > 0 || queueStatus.recent.length > 0) && (
+        <section className="glass rounded-2xl p-6 border border-white/5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-white font-semibold">Queue Status</h2>
+            <span className="text-[#475569] text-xs">auto-refreshes every 30s</span>
+          </div>
+
+          {/* Stats row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-[#13131f] rounded-xl p-3 border border-white/5">
+              <p className="text-[#475569] text-xs mb-1">Queued</p>
+              <p className="text-white text-xl font-bold">{queueStatus.queued}</p>
+            </div>
+            <div className="bg-[#13131f] rounded-xl p-3 border border-white/5">
+              <p className="text-[#475569] text-xs mb-1">Relayed today</p>
+              <p className="text-green-400 text-xl font-bold">
+                {queueStatus.relayed_today}
+                {queueStatus.daily_cap !== null && (
+                  <span className="text-[#475569] text-sm font-normal"> / {queueStatus.daily_cap}</span>
+                )}
+              </p>
+            </div>
+            <div className="bg-[#13131f] rounded-xl p-3 border border-white/5">
+              <p className="text-[#475569] text-xs mb-1">Failed today</p>
+              <p className={`text-xl font-bold ${queueStatus.failed_today > 0 ? "text-red-400" : "text-[#475569]"}`}>
+                {queueStatus.failed_today}
+              </p>
+            </div>
+            <div className="bg-[#13131f] rounded-xl p-3 border border-white/5">
+              <p className="text-[#475569] text-xs mb-1">Next lead</p>
+              <p className="text-white text-sm font-semibold">
+                {queueStatus.relay_mode === "throttled" && queueStatus.queued > 0
+                  ? queueStatus.next_lead_in_seconds !== null && queueStatus.next_lead_in_seconds <= 60
+                    ? `~${queueStatus.next_lead_in_seconds}s`
+                    : queueStatus.next_lead_in_seconds !== null
+                    ? `~${Math.ceil(queueStatus.next_lead_in_seconds / 60)}m`
+                    : "—"
+                  : queueStatus.queued === 0 ? "Queue empty" : "Instant"}
+              </p>
+              {queueStatus.relay_mode === "throttled" && (
+                <p className="text-[#334155] text-xs mt-0.5">{queueStatus.throttle_rate}/hr</p>
+              )}
+            </div>
+          </div>
+
+          {/* Recent leads feed */}
+          {queueStatus.recent.length > 0 && (
+            <div>
+              <p className="text-[#475569] text-xs mb-2 uppercase tracking-wide">Recent activity</p>
+              <div className="space-y-1">
+                {queueStatus.recent.map((lead) => (
+                  <div key={lead.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#13131f] border border-white/5 text-xs font-mono">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className={`shrink-0 w-2 h-2 rounded-full ${
+                        lead.status === "relayed"  ? "bg-green-400" :
+                        lead.status === "failed"   ? "bg-red-400" :
+                        lead.status === "queued"   ? "bg-amber-400" :
+                        lead.status === "relaying" ? "bg-blue-400" : "bg-[#334155]"
+                      }`} />
+                      <span className="text-[#94a3b8] truncate">{lead.email}</span>
+                      {lead.country && <span className="text-[#334155] shrink-0">{lead.country}</span>}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0 ml-3">
+                      {lead.buyer_lead_id && (
+                        <span className="text-green-400/70">#{lead.buyer_lead_id.slice(0, 12)}</span>
+                      )}
+                      {lead.relay_error && (
+                        <span className="text-red-400/70 max-w-[160px] truncate">{lead.relay_error}</span>
+                      )}
+                      <span className="text-[#334155]">
+                        {lead.relayed_at
+                          ? new Date(lead.relayed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : lead.status === "queued" ? "waiting" : "—"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {/* ── Integration Config ─────────────────────────────────────────────── */}
