@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -15,6 +15,8 @@ type Integration = {
   content_type: string;
   response_lead_id_path: string;
   response_redirect_url_path: string | null;
+  response_success_path: string | null;
+  response_success_value: string | null;
   ip_whitelist_required: boolean;
   allowed_ips: string[] | null;
   notes: string | null;
@@ -175,6 +177,13 @@ export default function IntegrationDetailPage() {
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const queuePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Live countdown (counts down from next_lead_in_seconds locally between polls)
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Copy-to-clipboard feedback
+  const [copied, setCopied] = useState<string | null>(null); // which field was just copied
+
   // ── Load ────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -190,7 +199,9 @@ export default function IntegrationDetailPage() {
         content_type: intData.content_type,
         response_lead_id_path: intData.response_lead_id_path,
         response_redirect_url_path: intData.response_redirect_url_path ?? "",
-        ip_whitelist_required: intData.ip_whitelist_required,
+        response_success_path: intData.response_success_path ?? "",
+        response_success_value: intData.response_success_value ?? "true",
+        ip_whitelist_required: intData.ip_whitelist_required ?? false,
         allowed_ips: intData.allowed_ips ?? null,
         notes: intData.notes ?? "",
         status: intData.status,
@@ -213,12 +224,42 @@ export default function IntegrationDetailPage() {
 
     async function refreshQueue() {
       const res = await fetch(`/api/admin/integrations/${id}/queue-status`);
-      if (res.ok) setQueueStatus(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setQueueStatus(data);
+        // Reset live countdown from fresh server value
+        if (data.next_lead_in_seconds !== null) {
+          setCountdown(data.next_lead_in_seconds);
+        } else {
+          setCountdown(null);
+        }
+      }
     }
     refreshQueue();
     queuePollRef.current = setInterval(refreshQueue, 30_000);
-    return () => { if (queuePollRef.current) clearInterval(queuePollRef.current); };
+    return () => {
+      if (queuePollRef.current) clearInterval(queuePollRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
   }, [id, router]);
+
+  // Tick down the live countdown every second
+  useEffect(() => {
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    if (countdown === null || countdown <= 0) return;
+    countdownRef.current = setInterval(() => {
+      setCountdown((c) => (c !== null && c > 0 ? c - 1 : 0));
+    }, 1000);
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, [countdown]);
+
+  // Copy to clipboard helper
+  const copyToClipboard = useCallback((text: string, key: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  }, []);
 
   // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -341,14 +382,26 @@ export default function IntegrationDetailPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white font-display">{integration.name}</h1>
-            <div className="flex items-center gap-3 mt-1.5">
+            <div className="flex items-center gap-3 mt-1.5 flex-wrap">
               <StatusBadge status={integration.status} />
-              <span className="text-[#334155] font-mono text-xs">deal: {integration.deal_id.slice(0, 8)}</span>
+              <button
+                onClick={() => copyToClipboard(integration.deal_id, "deal_id")}
+                className="text-[#334155] font-mono text-xs hover:text-[#94a3b8] transition-colors flex items-center gap-1 group"
+                title="Click to copy deal ID"
+              >
+                deal: {integration.deal_id.slice(0, 8)}
+                <span className="opacity-0 group-hover:opacity-60 text-[10px] transition-opacity">
+                  {copied === "deal_id" ? "✓" : "⎘"}
+                </span>
+              </button>
               {integration.relay_mode === "throttled" && (
                 <span className="text-[#334155] text-xs">🕐 {integration.throttle_rate}/hr</span>
               )}
               {integration.daily_cap && (
                 <span className="text-[#334155] text-xs">cap: {integration.daily_cap}/day</span>
+              )}
+              {queueStatus && queueStatus.failed_today > 0 && (
+                <span className="text-red-400/70 text-xs">⚠ {queueStatus.failed_today} failed today</span>
               )}
             </div>
           </div>
@@ -416,13 +469,14 @@ export default function IntegrationDetailPage() {
                 { label: "Relayed today",  value: `${queueStatus.relayed_today}${queueStatus.daily_cap ? ` / ${queueStatus.daily_cap}` : ""}`, color: "text-green-400" },
                 { label: "Failed today",   value: queueStatus.failed_today,   color: queueStatus.failed_today > 0 ? "text-red-400" : "text-[#475569]" },
                 { label: "Next lead",      value: queueStatus.relay_mode === "throttled" && queueStatus.queued > 0
-                    ? queueStatus.next_lead_in_seconds !== null
-                      ? queueStatus.next_lead_in_seconds <= 60
-                        ? `~${queueStatus.next_lead_in_seconds}s`
-                        : `~${Math.ceil(queueStatus.next_lead_in_seconds / 60)}m`
-                      : "—"
+                    ? countdown !== null && countdown > 0
+                      ? countdown <= 60
+                        ? `${countdown}s`
+                        : `${Math.floor(countdown / 60)}m ${countdown % 60}s`
+                      : countdown === 0 ? "Now" : "—"
                     : queueStatus.queued === 0 ? "Empty" : "Instant",
-                  color: "text-white" },
+                  color: queueStatus.relay_mode === "throttled" && countdown !== null && countdown <= 30 && queueStatus.queued > 0
+                    ? "text-amber-400" : "text-white" },
               ].map(({ label, value, color }) => (
                 <Card key={label}>
                   <p className="text-[#475569] text-xs mb-1.5">{label}</p>
@@ -431,6 +485,38 @@ export default function IntegrationDetailPage() {
               ))}
             </div>
           )}
+
+          {/* Postback URL */}
+          <Card className="border-[#00d4ff]/10 bg-[#00d4ff]/3">
+            <SectionTitle>FTD Postback URL</SectionTitle>
+            <p className="text-[#475569] text-xs mb-3">
+              Send this URL to the buyer. When a lead converts, they hit it with <span className="font-mono text-[#64748b]">buyer_lead_id</span> to fire the FTD event back.
+            </p>
+            {["ftd", "chargeback"].map((eventType) => {
+              const url = `${typeof window !== "undefined" ? window.location.origin : "https://affinitrax.io"}/api/postback?deal_id=${integration.deal_id}&event_type=${eventType}&buyer_lead_id={id}`;
+              const key = `postback_${eventType}`;
+              return (
+                <div key={eventType} className="mb-2 last:mb-0">
+                  <p className="text-[10px] text-[#334155] uppercase tracking-widest mb-1 font-semibold">{eventType}</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-[11px] font-mono text-[#64748b] bg-[#080c14] border border-white/5 rounded-lg px-3 py-2 truncate">
+                      {url}
+                    </code>
+                    <button
+                      onClick={() => copyToClipboard(url, key)}
+                      className={`shrink-0 px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                        copied === key
+                          ? "bg-green-500/15 text-green-400 border-green-500/30"
+                          : "bg-white/5 text-[#94a3b8] border-white/10 hover:border-white/25 hover:text-white"
+                      }`}
+                    >
+                      {copied === key ? "✓ Copied" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </Card>
 
           {/* Parked leads action */}
           {parkedCount !== null && parkedCount > 0 && (
@@ -563,6 +649,20 @@ export default function IntegrationDetailPage() {
                 placeholder="e.g. id  or  details.leadRequest.ID" />
               <Input label="Redirect URL path (optional)" value={(form.response_redirect_url_path as string) ?? ""} onChange={(v) => setF("response_redirect_url_path", v)} mono span2
                 placeholder="e.g. autologin" />
+              <div className="md:col-span-2 border-t border-white/5 pt-4">
+                <p className="text-[10px] text-[#334155] uppercase tracking-widest mb-3 font-semibold">
+                  Success validation <span className="normal-case text-[#1e293b] font-normal ml-1">— for buyers that return HTTP 200 even on rejection (e.g. ELNOPY)</span>
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input label="Success path (JSON field)" value={(form.response_success_path as string) ?? ""} onChange={(v) => setF("response_success_path", v || null)} mono
+                    placeholder="e.g. success  or  data.accepted" />
+                  <Input label="Expected value" value={(form.response_success_value as string) ?? "true"} onChange={(v) => setF("response_success_value", v)} mono
+                    placeholder="true" />
+                </div>
+                <p className="text-[#334155] text-xs mt-1.5">
+                  If set, relay checks <span className="font-mono">{`body.${(form.response_success_path as string) || "success"}`}</span> === <span className="font-mono">&quot;{(form.response_success_value as string) || "true"}&quot;</span> — mismatches mark the lead as failed.
+                </p>
+              </div>
             </div>
           </Card>
 
@@ -620,6 +720,41 @@ export default function IntegrationDetailPage() {
                 />
               </div>
             </div>
+          </Card>
+
+          {/* IP Whitelist */}
+          <Card>
+            <SectionTitle>IP Whitelist</SectionTitle>
+            <div className="flex items-center gap-3 mb-4">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={(form.ip_whitelist_required as boolean) ?? false}
+                  onChange={(e) => setF("ip_whitelist_required", e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-[#1e293b] peer-focus:outline-none rounded-full peer
+                  peer-checked:after:translate-x-full peer-checked:bg-[#00d4ff]/40
+                  after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                  after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all" />
+              </label>
+              <span className="text-sm text-[#94a3b8]">Require lead IP to be in the allowlist</span>
+            </div>
+            {(form.ip_whitelist_required as boolean) && (
+              <div>
+                <label className="block text-xs text-[#64748b] mb-1.5 font-medium">
+                  Allowed IPs / CIDRs <span className="text-[#334155] font-normal">(comma-separated)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={(form.allowed_ips as string[])?.join(", ") ?? ""}
+                  onChange={(e) => setF("allowed_ips", e.target.value ? e.target.value.split(",").map((s) => s.trim()).filter(Boolean) : null)}
+                  placeholder="e.g. 1.2.3.4, 10.0.0.0/24"
+                  className="bg-[#080c14] border border-white/8 rounded-lg px-3 py-2 text-sm text-[#94a3b8] w-full font-mono
+                    focus:outline-none focus:border-[#00d4ff]/40 resize-none placeholder:text-[#1e293b]"
+                />
+              </div>
+            )}
           </Card>
 
           {/* Notes */}
