@@ -14,7 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { relayLead } from "@/lib/integration/relay";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 async function requireAdmin() {
   const supabase = await createClient();

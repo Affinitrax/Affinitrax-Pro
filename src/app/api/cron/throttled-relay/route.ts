@@ -15,7 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { relayLead } from "@/lib/integration/relay";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
   // Verify cron secret
