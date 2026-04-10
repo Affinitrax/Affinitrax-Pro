@@ -49,6 +49,8 @@ type DealIntegration = {
   content_type: "json" | "form_urlencoded";
   response_lead_id_path: string;
   response_redirect_url_path: string | null;
+  response_success_path: string | null;   // e.g. "success" — must equal response_success_value
+  response_success_value: string;         // default "true"
   allowed_geos: string[] | null;
   priority: number;
   daily_cap: number | null;
@@ -323,13 +325,26 @@ export async function relayLead(
       }
 
       if (parsed !== null) {
-        // Response is valid JSON — only extract via configured path, never fall back to raw text
-        buyerLeadId =
-          extractByPath(parsed, integration.response_lead_id_path) ?? undefined;
-        if (integration.response_redirect_url_path) {
-          redirectUrl =
-            extractByPath(parsed, integration.response_redirect_url_path) ??
-            undefined;
+        // Optional per-integration success check (e.g. ELNOPY returns HTTP 200 with
+        // {"success":false,"message":"Offer not found!"} on rejection).
+        if (integration.response_success_path) {
+          const successVal = extractByPath(parsed, integration.response_success_path);
+          if (successVal !== (integration.response_success_value ?? "true")) {
+            // Buyer body signals failure despite HTTP 2xx — treat as relay error
+            const msg = extractByPath(parsed, "message") ?? "Buyer rejected lead";
+            relayError = `Buyer rejected: ${msg}`;
+          }
+        }
+
+        if (!relayError) {
+          // Response is valid JSON — only extract via configured path, never fall back to raw text
+          buyerLeadId =
+            extractByPath(parsed, integration.response_lead_id_path) ?? undefined;
+          if (integration.response_redirect_url_path) {
+            redirectUrl =
+              extractByPath(parsed, integration.response_redirect_url_path) ??
+              undefined;
+          }
         }
       }
       // If parsed is null (non-JSON) and buyerLeadId is still undefined, leave it undefined
