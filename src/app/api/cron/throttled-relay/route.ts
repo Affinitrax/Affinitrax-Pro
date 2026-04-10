@@ -18,9 +18,13 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret
+  // Verify cron secret — accepts either Vercel CRON_SECRET or Supabase SUPABASE_CRON_SECRET
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const validTokens = [
+    process.env.CRON_SECRET,
+    process.env.SUPABASE_CRON_SECRET,
+  ].filter(Boolean);
+  if (!validTokens.some((t) => authHeader === `Bearer ${t}`)) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
