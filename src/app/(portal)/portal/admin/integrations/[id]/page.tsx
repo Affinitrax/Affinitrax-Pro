@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type Integration = {
   id: string;
@@ -47,30 +47,99 @@ type ApiKey = {
   created_at: string;
 };
 
+type QueueLead = {
+  id: string; email: string; country: string | null; status: string;
+  buyer_lead_id: string | null; relay_error: string | null;
+  relayed_at: string | null; created_at: string;
+};
+
+type QueueStatus = {
+  queued: number; relayed_today: number; failed_today: number;
+  daily_cap: number | null; throttle_rate: number; relay_mode: string;
+  status: string; last_relayed_at: string | null;
+  next_lead_in_seconds: number | null; recent: QueueLead[];
+};
+
 const AFFINITRAX_FIELDS = [
   "email", "first_name", "last_name", "phone", "country",
   "ip", "click_id", "sub1", "sub2", "sub3",
 ];
-
 const TRANSFORMS = ["none", "uppercase", "lowercase", "e164_phone", "strip_plus"];
+const TABS = ["Overview", "Config", "Mappings", "Keys"] as const;
+type Tab = typeof TABS[number];
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Small helpers ──────────────────────────────────────────────────────────────
+
+function StatusDot({ status }: { status: string }) {
+  const color = status === "active" ? "bg-green-400" : status === "testing" ? "bg-amber-400" : "bg-[#334155]";
+  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} />;
+}
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    active: "bg-green-500/15 text-green-400 border border-green-500/30",
-    testing: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+    active:   "bg-green-500/15 text-green-400 border border-green-500/30",
+    testing:  "bg-amber-500/15 text-amber-400 border border-amber-500/30",
     inactive: "bg-[#1e293b] text-[#475569] border border-white/10",
-    revoked: "bg-red-500/15 text-red-400 border border-red-500/30",
   };
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${styles[status] ?? ""}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${styles[status] ?? ""}`}>
+      <StatusDot status={status} />
       {status}
     </span>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+function Input({ label, value, onChange, mono = false, span2 = false, placeholder = "" }: {
+  label: string; value: string; onChange: (v: string) => void;
+  mono?: boolean; span2?: boolean; placeholder?: string;
+}) {
+  return (
+    <div className={span2 ? "md:col-span-2" : ""}>
+      <label className="block text-xs text-[#64748b] mb-1.5 font-medium">{label}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`bg-[#0d1117] border border-white/8 rounded-lg px-3 py-2 text-sm text-white w-full
+          focus:outline-none focus:border-[#00d4ff]/40 focus:bg-[#0d1117] transition-colors
+          placeholder:text-[#334155] ${mono ? "font-mono" : ""}`}
+      />
+    </div>
+  );
+}
+
+function Select({ label, value, onChange, options }: {
+  label: string; value: string; onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div>
+      <label className="block text-xs text-[#64748b] mb-1.5 font-medium">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-[#0d1117] border border-white/8 rounded-lg px-3 py-2 text-sm text-white w-full
+          focus:outline-none focus:border-[#00d4ff]/40 transition-colors"
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`bg-[#0d1117] border border-white/8 rounded-xl p-5 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-xs font-semibold text-[#475569] uppercase tracking-widest mb-4">{children}</h3>;
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function IntegrationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -79,34 +148,39 @@ export default function IntegrationDetailPage() {
   const [integration, setIntegration] = useState<Integration | null>(null);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>("Overview");
+
+  // Form state (Config tab)
+  const [form, setForm] = useState<Partial<Integration & { auth_credential?: string }>>({});
+  const [mappings, setMappings] = useState<FieldMapping[]>([]);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
-  // Edit state
-  const [form, setForm] = useState<Partial<Integration & { auth_credential?: string }>>({});
-  const [mappings, setMappings] = useState<FieldMapping[]>([]);
-
-  // New API key state
+  // API key state
   const [newKeyLabel, setNewKeyLabel] = useState("");
   const [newKeyResult, setNewKeyResult] = useState<string | null>(null);
   const [generatingKey, setGeneratingKey] = useState(false);
+
+  // Overview actions
   const [parkedCount, setParkedCount] = useState<number | null>(null);
   const [replaying, setReplaying] = useState(false);
   const [testRelaying, setTestRelaying] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean; buyer_lead_id: string | null;
+    relay_error: string | null; lead_country: string | null; lead_ip: string | null;
+  } | null>(null);
   const [togglingStatus, setTogglingStatus] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; buyer_lead_id: string | null; relay_error: string | null; lead_country: string | null; lead_ip: string | null } | null>(null);
 
-  // Queue status (throttled relay live feed)
-  type QueueLead = { id: string; email: string; country: string | null; status: string; buyer_lead_id: string | null; relay_error: string | null; relayed_at: string | null; created_at: string };
-  type QueueStatus = { queued: number; relayed_today: number; failed_today: number; daily_cap: number | null; throttle_rate: number; relay_mode: string; status: string; last_relayed_at: string | null; next_lead_in_seconds: number | null; recent: QueueLead[] };
+  // Queue status
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const queuePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Load ────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     async function load() {
       const intData: Integration = await fetch(`/api/admin/integrations/${id}`).then((r) => r.json());
       if (!intData.id) { router.push("/portal/admin/integrations"); return; }
-
       setIntegration(intData);
       setForm({
         name: intData.name,
@@ -131,15 +205,12 @@ export default function IntegrationDetailPage() {
       const keysData: ApiKey[] = await fetch(`/api/admin/api-keys?deal_id=${intData.deal_id}`).then((r) => r.json());
       setApiKeys(Array.isArray(keysData) ? keysData : []);
 
-      // Count parked leads for this deal
       const parkedRes = await fetch(`/api/admin/leads?deal_id=${intData.deal_id}&status=parked&limit=1`).then((r) => r.json());
       setParkedCount(typeof parkedRes.total === "number" ? parkedRes.total : 0);
-
       setLoading(false);
     }
     load();
 
-    // Poll queue status every 30s
     async function refreshQueue() {
       const res = await fetch(`/api/admin/integrations/${id}/queue-status`);
       if (res.ok) setQueueStatus(await res.json());
@@ -149,16 +220,21 @@ export default function IntegrationDetailPage() {
     return () => { if (queuePollRef.current) clearInterval(queuePollRef.current); };
   }, [id, router]);
 
+  // ── Actions ─────────────────────────────────────────────────────────────────
+
+  function setF(key: string, value: unknown) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
   async function saveIntegration() {
-    setSaving(true);
-    setMsg(null);
+    setSaving(true); setMsg(null);
     const res = await fetch(`/api/admin/integrations/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
     if (res.ok) {
-      setMsg({ type: "ok", text: "Integration saved." });
+      setMsg({ type: "ok", text: "Saved." });
+      setIntegration((prev) => prev ? { ...prev, ...(form as Partial<Integration>) } : prev);
     } else {
       const d = await res.json();
       setMsg({ type: "err", text: d.error ?? "Save failed" });
@@ -167,54 +243,66 @@ export default function IntegrationDetailPage() {
   }
 
   async function saveMappings() {
-    setSaving(true);
-    setMsg(null);
+    setSaving(true); setMsg(null);
     const res = await fetch(`/api/admin/integrations/${id}/mappings`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(mappings.map((m, i) => ({ ...m, sort_order: i }))),
     });
-    if (res.ok) {
-      setMsg({ type: "ok", text: "Field mappings saved." });
-    } else {
-      const d = await res.json();
-      setMsg({ type: "err", text: d.error ?? "Save failed" });
-    }
+    if (res.ok) setMsg({ type: "ok", text: "Mappings saved." });
+    else { const d = await res.json(); setMsg({ type: "err", text: d.error ?? "Save failed" }); }
     setSaving(false);
   }
 
-  function addMapping() {
-    setMappings((prev) => [
-      ...prev,
-      { affinitrax_field: "email", buyer_field: "", required: false, default_value: null, transform: "none", sort_order: prev.length },
-    ]);
+  async function toggleStatus() {
+    if (!integration) return;
+    setTogglingStatus(true);
+    const next = integration.status === "active" ? "testing" : "active";
+    const res = await fetch(`/api/admin/integrations/${id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: next }),
+    });
+    if (res.ok) {
+      setIntegration((prev) => prev ? { ...prev, status: next } : prev);
+      setForm((f) => ({ ...f, status: next }));
+    }
+    setTogglingStatus(false);
   }
 
-  function removeMapping(idx: number) {
-    setMappings((prev) => prev.filter((_, i) => i !== idx));
+  async function testRelay() {
+    setTestRelaying(true); setTestResult(null); setMsg(null);
+    const res = await fetch(`/api/admin/integrations/${id}/test-relay`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setTestResult(data);
+      setMsg(data.success
+        ? { type: "ok", text: `Accepted ✓  buyer_lead_id: ${data.buyer_lead_id ?? "—"}  ·  ${data.lead_country}  ·  IP ${data.lead_ip}` }
+        : { type: "err", text: `Rejected: ${data.relay_error ?? "unknown error"}` }
+      );
+    } else {
+      setMsg({ type: "err", text: data.error ?? "Test relay failed" });
+    }
+    setTestRelaying(false);
   }
 
-  function updateMapping(idx: number, key: keyof FieldMapping, value: string | boolean | null) {
-    setMappings((prev) => prev.map((m, i) => (i === idx ? { ...m, [key]: value } : m)));
+  async function replayParked() {
+    setReplaying(true); setMsg(null);
+    const res = await fetch(`/api/admin/integrations/${id}/replay`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) setMsg({ type: "ok", text: data.message ?? `Queued ${data.queued} leads.` });
+    else setMsg({ type: "err", text: data.error ?? "Replay failed" });
+    setReplaying(false);
   }
 
   async function generateKey() {
     if (!integration) return;
-    setGeneratingKey(true);
-    setNewKeyResult(null);
+    setGeneratingKey(true); setNewKeyResult(null);
     const res = await fetch("/api/admin/api-keys", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ deal_id: integration.deal_id, label: newKeyLabel || "Default" }),
     });
     const data = await res.json();
-    if (res.ok) {
-      setNewKeyResult(data.full_key);
-      setApiKeys((prev) => [data, ...prev]);
-      setNewKeyLabel("");
-    } else {
-      setMsg({ type: "err", text: data.error ?? "Failed to generate key" });
-    }
+    if (res.ok) { setNewKeyResult(data.full_key); setApiKeys((prev) => [data, ...prev]); setNewKeyLabel(""); }
+    else setMsg({ type: "err", text: data.error ?? "Failed to generate key" });
     setGeneratingKey(false);
   }
 
@@ -223,61 +311,13 @@ export default function IntegrationDetailPage() {
     setApiKeys((prev) => prev.map((k) => k.id === keyId ? { ...k, status: "revoked" as const } : k));
   }
 
-  async function testRelay() {
-    setTestRelaying(true);
-    setTestResult(null);
-    setMsg(null);
-    const res = await fetch(`/api/admin/integrations/${id}/test-relay`, { method: "POST" });
-    const data = await res.json();
-    if (res.ok) {
-      setTestResult(data);
-      if (data.success) {
-        setMsg({ type: "ok", text: `Test lead accepted ✓ buyer_lead_id: ${data.buyer_lead_id ?? "—"} (${data.lead_country}, IP: ${data.lead_ip})` });
-      } else {
-        setMsg({ type: "err", text: `Test lead rejected: ${data.relay_error ?? "unknown error"}` });
-      }
-    } else {
-      setMsg({ type: "err", text: data.error ?? "Test relay failed" });
-    }
-    setTestRelaying(false);
-  }
-
-  async function togglePause() {
-    if (!integration) return;
-    setTogglingStatus(true);
-    const newStatus = integration.status === "active" ? "testing" : "active";
-    const res = await fetch(`/api/admin/integrations/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
-    if (res.ok) {
-      setIntegration((prev) => prev ? { ...prev, status: newStatus } : prev);
-      setForm((f) => ({ ...f, status: newStatus }));
-      setMsg({ type: "ok", text: newStatus === "active" ? "Integration resumed — leads will flow." : "Integration paused — no leads will relay." });
-    }
-    setTogglingStatus(false);
-  }
-
-  async function replayParked() {
-    setReplaying(true);
-    setMsg(null);
-    const res = await fetch(`/api/admin/integrations/${id}/replay`, { method: "POST" });
-    const data = await res.json();
-    if (res.ok) {
-      setMsg({ type: "ok", text: `Replay complete — ${data.replayed} relayed, ${data.failed} failed` });
-      setParkedCount(data.failed);
-    } else {
-      setMsg({ type: "err", text: data.error ?? "Replay failed" });
-    }
-    setReplaying(false);
-  }
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <main className="flex-1 p-8">
         <div className="glass rounded-2xl p-10 text-center border border-white/5">
-          <p className="text-[#475569] text-sm">Loading…</p>
+          <p className="text-[#475569] text-sm animate-pulse">Loading integration…</p>
         </div>
       </main>
     );
@@ -285,154 +325,177 @@ export default function IntegrationDetailPage() {
 
   if (!integration) return null;
 
+  const isActive = integration.status === "active";
+
   return (
-    <main className="flex-1 p-8 max-w-4xl space-y-8">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <button
-            onClick={() => router.push("/portal/admin/integrations")}
-            className="text-[#475569] text-xs hover:text-[#94a3b8] transition-colors mb-2 flex items-center gap-1"
-          >
-            ← Back to Integrations
-          </button>
-          <h1 className="text-2xl font-bold text-white font-display">{integration.name}</h1>
-          <div className="flex items-center gap-3 mt-1">
-            <StatusBadge status={integration.status} />
-            <span className="text-[#334155] font-mono text-xs">deal: {integration.deal_id.slice(0, 8)}</span>
-          </div>
-        </div>
-        {/* Pause / Resume toggle */}
+    <main className="flex-1 p-8 max-w-4xl space-y-6">
+
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <div>
         <button
-          onClick={togglePause}
-          disabled={togglingStatus}
-          className={`mt-6 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 flex items-center gap-2 ${
-            integration.status === "active"
-              ? "bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25"
-              : "bg-green-500/15 text-green-400 border border-green-500/30 hover:bg-green-500/25"
-          }`}
+          onClick={() => router.push("/portal/admin/integrations")}
+          className="text-[#334155] text-xs hover:text-[#94a3b8] transition-colors mb-3 flex items-center gap-1"
         >
-          {togglingStatus ? "…" : integration.status === "active" ? "⏸ Pause" : "▶ Resume"}
+          ← Integrations
         </button>
-      </div>
-
-      {msg && (
-        <div className={`px-4 py-3 rounded-lg text-sm ${msg.type === "ok" ? "bg-green-500/15 text-green-400 border border-green-500/30" : "bg-red-500/15 text-red-400 border border-red-500/30"}`}>
-          {msg.text}
-        </div>
-      )}
-
-      {/* ── Parked leads banner ────────────────────────────────────────────── */}
-      {parkedCount !== null && parkedCount > 0 && (
-        <div className="px-5 py-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-amber-400 font-semibold text-sm">
-                {parkedCount} parked lead{parkedCount !== 1 ? "s" : ""} waiting
-              </p>
-              <p className="text-amber-400/70 text-xs mt-0.5">
-                These leads arrived before the buyer integration was active. Test first, then replay all.
-              </p>
-            </div>
-            <div className="flex gap-2 ml-4">
-              <button
-                onClick={testRelay}
-                disabled={testRelaying}
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 whitespace-nowrap bg-[#13131f] border border-white/20 hover:border-[#00d4ff]/40 transition-colors"
-              >
-                {testRelaying ? "Testing…" : "Send 1 Test Lead"}
-              </button>
-              <button
-                onClick={replayParked}
-                disabled={replaying || integration?.status !== "active"}
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 whitespace-nowrap"
-                style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)" }}
-              >
-                {replaying ? "Replaying…" : `Replay All ${parkedCount}`}
-              </button>
-            </div>
-          </div>
-          {testResult && (
-            <div className={`text-xs font-mono px-3 py-2 rounded-lg ${testResult.success ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
-              {testResult.success
-                ? `✓ Accepted — buyer_lead_id: ${testResult.buyer_lead_id ?? "—"} | geo: ${testResult.lead_country} | ip: ${testResult.lead_ip}`
-                : `✗ Rejected — ${testResult.relay_error}`}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Queue Status ──────────────────────────────────────────────────── */}
-      {queueStatus && (queueStatus.queued > 0 || queueStatus.relayed_today > 0 || queueStatus.recent.length > 0) && (
-        <section className="glass rounded-2xl p-6 border border-white/5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-white font-semibold">Queue Status</h2>
-            <span className="text-[#475569] text-xs">auto-refreshes every 30s</span>
-          </div>
-
-          {/* Stats row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-[#13131f] rounded-xl p-3 border border-white/5">
-              <p className="text-[#475569] text-xs mb-1">Queued</p>
-              <p className="text-white text-xl font-bold">{queueStatus.queued}</p>
-            </div>
-            <div className="bg-[#13131f] rounded-xl p-3 border border-white/5">
-              <p className="text-[#475569] text-xs mb-1">Relayed today</p>
-              <p className="text-green-400 text-xl font-bold">
-                {queueStatus.relayed_today}
-                {queueStatus.daily_cap !== null && (
-                  <span className="text-[#475569] text-sm font-normal"> / {queueStatus.daily_cap}</span>
-                )}
-              </p>
-            </div>
-            <div className="bg-[#13131f] rounded-xl p-3 border border-white/5">
-              <p className="text-[#475569] text-xs mb-1">Failed today</p>
-              <p className={`text-xl font-bold ${queueStatus.failed_today > 0 ? "text-red-400" : "text-[#475569]"}`}>
-                {queueStatus.failed_today}
-              </p>
-            </div>
-            <div className="bg-[#13131f] rounded-xl p-3 border border-white/5">
-              <p className="text-[#475569] text-xs mb-1">Next lead</p>
-              <p className="text-white text-sm font-semibold">
-                {queueStatus.relay_mode === "throttled" && queueStatus.queued > 0
-                  ? queueStatus.next_lead_in_seconds !== null && queueStatus.next_lead_in_seconds <= 60
-                    ? `~${queueStatus.next_lead_in_seconds}s`
-                    : queueStatus.next_lead_in_seconds !== null
-                    ? `~${Math.ceil(queueStatus.next_lead_in_seconds / 60)}m`
-                    : "—"
-                  : queueStatus.queued === 0 ? "Queue empty" : "Instant"}
-              </p>
-              {queueStatus.relay_mode === "throttled" && (
-                <p className="text-[#334155] text-xs mt-0.5">{queueStatus.throttle_rate}/hr</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white font-display">{integration.name}</h1>
+            <div className="flex items-center gap-3 mt-1.5">
+              <StatusBadge status={integration.status} />
+              <span className="text-[#334155] font-mono text-xs">deal: {integration.deal_id.slice(0, 8)}</span>
+              {integration.relay_mode === "throttled" && (
+                <span className="text-[#334155] text-xs">🕐 {integration.throttle_rate}/hr</span>
+              )}
+              {integration.daily_cap && (
+                <span className="text-[#334155] text-xs">cap: {integration.daily_cap}/day</span>
               )}
             </div>
           </div>
 
-          {/* Recent leads feed */}
-          {queueStatus.recent.length > 0 && (
+          {/* Status toggle */}
+          <button
+            onClick={toggleStatus}
+            disabled={togglingStatus}
+            className={`px-5 py-2.5 rounded-xl text-sm font-semibold border transition-all disabled:opacity-40 flex items-center gap-2 ${
+              isActive
+                ? "bg-amber-500/10 text-amber-400 border-amber-500/25 hover:bg-amber-500/20"
+                : "bg-green-500/10 text-green-400 border-green-500/25 hover:bg-green-500/20"
+            }`}
+          >
+            {togglingStatus ? "…" : isActive ? "⏸  Pause relay" : "▶  Resume relay"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Toast message ───────────────────────────────────────────────────── */}
+      {msg && (
+        <div className={`px-4 py-3 rounded-lg text-sm flex items-start justify-between gap-3 ${
+          msg.type === "ok"
+            ? "bg-green-500/10 text-green-400 border border-green-500/20"
+            : "bg-red-500/10 text-red-400 border border-red-500/20"
+        }`}>
+          <span>{msg.text}</span>
+          <button onClick={() => setMsg(null)} className="text-current opacity-50 hover:opacity-100 shrink-0">✕</button>
+        </div>
+      )}
+
+      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
+      <div className="flex gap-1 bg-[#0d1117] border border-white/8 rounded-xl p-1">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab
+                ? "bg-white/8 text-white"
+                : "text-[#475569] hover:text-[#94a3b8]"
+            }`}
+          >
+            {tab}
+            {tab === "Overview" && queueStatus && queueStatus.queued > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-400">
+                {queueStatus.queued}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          TAB: OVERVIEW
+      ══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === "Overview" && (
+        <div className="space-y-5">
+
+          {/* Queue stats */}
+          {queueStatus && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: "Queued",         value: queueStatus.queued,         color: "text-amber-400" },
+                { label: "Relayed today",  value: `${queueStatus.relayed_today}${queueStatus.daily_cap ? ` / ${queueStatus.daily_cap}` : ""}`, color: "text-green-400" },
+                { label: "Failed today",   value: queueStatus.failed_today,   color: queueStatus.failed_today > 0 ? "text-red-400" : "text-[#475569]" },
+                { label: "Next lead",      value: queueStatus.relay_mode === "throttled" && queueStatus.queued > 0
+                    ? queueStatus.next_lead_in_seconds !== null
+                      ? queueStatus.next_lead_in_seconds <= 60
+                        ? `~${queueStatus.next_lead_in_seconds}s`
+                        : `~${Math.ceil(queueStatus.next_lead_in_seconds / 60)}m`
+                      : "—"
+                    : queueStatus.queued === 0 ? "Empty" : "Instant",
+                  color: "text-white" },
+              ].map(({ label, value, color }) => (
+                <Card key={label}>
+                  <p className="text-[#475569] text-xs mb-1.5">{label}</p>
+                  <p className={`text-xl font-bold ${color}`}>{value}</p>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {/* Parked leads action */}
+          {parkedCount !== null && parkedCount > 0 && (
+            <Card className="border-amber-500/20 bg-amber-500/5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-amber-400 font-semibold text-sm">{parkedCount} parked leads waiting</p>
+                  <p className="text-amber-400/60 text-xs mt-0.5">Arrived before this integration was active.</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={testRelay}
+                    disabled={testRelaying}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white border border-white/15 hover:border-white/30 transition-colors disabled:opacity-40 bg-white/5"
+                  >
+                    {testRelaying ? "Testing…" : "Send 1 test"}
+                  </button>
+                  <button
+                    onClick={replayParked}
+                    disabled={replaying || integration.status !== "active"}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-40 transition-colors"
+                    style={{ background: "linear-gradient(135deg, #f59e0b, #d97706)" }}
+                  >
+                    {replaying ? "Queuing…" : `Replay all ${parkedCount}`}
+                  </button>
+                </div>
+              </div>
+              {testResult && (
+                <div className={`mt-3 text-xs font-mono px-3 py-2 rounded-lg ${
+                  testResult.success
+                    ? "bg-green-500/10 text-green-400 border border-green-500/15"
+                    : "bg-red-500/10 text-red-400 border border-red-500/15"
+                }`}>
+                  {testResult.success
+                    ? `✓ Accepted  ·  buyer_lead_id: ${testResult.buyer_lead_id ?? "—"}  ·  geo: ${testResult.lead_country}  ·  ip: ${testResult.lead_ip}`
+                    : `✗ Rejected  ·  ${testResult.relay_error}`}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Recent activity feed */}
+          {queueStatus && queueStatus.recent.length > 0 && (
             <div>
-              <p className="text-[#475569] text-xs mb-2 uppercase tracking-wide">Recent activity</p>
+              <SectionTitle>Recent activity</SectionTitle>
               <div className="space-y-1">
                 {queueStatus.recent.map((lead) => (
-                  <div key={lead.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-[#13131f] border border-white/5 text-xs font-mono">
+                  <div key={lead.id} className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[#0d1117] border border-white/5 text-xs">
                     <div className="flex items-center gap-3 min-w-0">
                       <span className={`shrink-0 w-2 h-2 rounded-full ${
                         lead.status === "relayed"  ? "bg-green-400" :
-                        lead.status === "failed"   ? "bg-red-400" :
-                        lead.status === "queued"   ? "bg-amber-400" :
-                        lead.status === "relaying" ? "bg-blue-400" : "bg-[#334155]"
+                        lead.status === "failed"   ? "bg-red-400"   :
+                        lead.status === "queued"   ? "bg-amber-400" : "bg-blue-400"
                       }`} />
-                      <span className="text-[#94a3b8] truncate">{lead.email}</span>
-                      {lead.country && <span className="text-[#334155] shrink-0">{lead.country}</span>}
+                      <span className="text-[#94a3b8] font-mono truncate">{lead.email}</span>
+                      {lead.country && <span className="text-[#334155] shrink-0 font-mono">{lead.country}</span>}
                     </div>
-                    <div className="flex items-center gap-3 shrink-0 ml-3">
+                    <div className="flex items-center gap-4 shrink-0 ml-3">
                       {lead.buyer_lead_id && (
-                        <span className="text-green-400/70">#{lead.buyer_lead_id.slice(0, 12)}</span>
+                        <span className="text-green-400 font-mono">#{lead.buyer_lead_id.slice(0, 12)}</span>
                       )}
                       {lead.relay_error && (
-                        <span className="text-red-400/70 max-w-[160px] truncate">{lead.relay_error}</span>
+                        <span className="text-red-400 max-w-[180px] truncate">{lead.relay_error}</span>
                       )}
-                      <span className="text-[#334155]">
+                      <span className="text-[#334155] font-mono w-16 text-right">
                         {lead.relayed_at
                           ? new Date(lead.relayed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
                           : lead.status === "queued" ? "waiting" : "—"}
@@ -441,405 +504,299 @@ export default function IntegrationDetailPage() {
                   </div>
                 ))}
               </div>
+              <p className="text-[#1e293b] text-xs mt-2 text-right">auto-refreshes every 30s</p>
             </div>
           )}
-        </section>
+
+          {/* Empty state */}
+          {(!queueStatus || queueStatus.recent.length === 0) && parkedCount === 0 && (
+            <Card className="text-center py-10">
+              <p className="text-[#334155] text-sm">No activity yet — leads will appear here once the integration goes active.</p>
+            </Card>
+          )}
+        </div>
       )}
 
-      {/* ── Integration Config ─────────────────────────────────────────────── */}
-      <section className="glass rounded-2xl p-6 border border-white/5">
-        <h2 className="text-white font-semibold mb-5">Buyer CRM Config</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            { label: "Name", key: "name" },
-            { label: "Endpoint URL", key: "endpoint_url" },
-            { label: "Auth Header Name", key: "auth_header_name" },
-            { label: "Response Lead ID Path", key: "response_lead_id_path" },
-            { label: "Redirect URL Path (optional)", key: "response_redirect_url_path" },
-          ].map(({ label, key }) => (
-            <div key={key} className={key === "endpoint_url" ? "md:col-span-2" : ""}>
-              <label className="block text-xs text-[#94a3b8] mb-1.5">{label}</label>
-              <input
-                value={(form as Record<string, string>)[key] ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 font-mono"
-              />
-            </div>
-          ))}
+      {/* ══════════════════════════════════════════════════════════════════════
+          TAB: CONFIG
+      ══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === "Config" && (
+        <div className="space-y-5">
 
-          <div>
-            <label className="block text-xs text-[#94a3b8] mb-1.5">Auth Type</label>
-            <select
-              value={form.auth_type ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, auth_type: e.target.value }))}
-              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-            >
-              {["header_key", "bearer", "basic", "query_param"].map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs text-[#94a3b8] mb-1.5">Content Type</label>
-            <select
-              value={form.content_type ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, content_type: e.target.value }))}
-              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-            >
-              <option value="json">JSON</option>
-              <option value="form_urlencoded">Form URL-encoded</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs text-[#94a3b8] mb-1.5">Status</label>
-            <select
-              value={form.status ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as "active" | "inactive" | "testing" }))}
-              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-            >
-              <option value="testing">Testing</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs text-[#94a3b8] mb-1.5">New Credential (leave blank to keep existing)</label>
-            <input
-              type="password"
-              placeholder="••••••••••••"
-              value={form.auth_credential ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, auth_credential: e.target.value }))}
-              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="block text-xs text-[#94a3b8] mb-1.5">Notes</label>
-            <textarea
-              value={form.notes ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              rows={2}
-              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 resize-none"
-            />
-          </div>
-
-          {/* ── Buyer IP Whitelist ──────────────────────────────────────────── */}
-          <div className="md:col-span-2">
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-[#94a3b8]">
-                Buyer IP Whitelist
-                <span className="ml-2 text-[#334155]">— only these IPs can fire postbacks for this deal</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <span className="text-xs text-[#475569]">Enforce</span>
-                <div
-                  onClick={() => setForm((f) => ({ ...f, ip_whitelist_required: !f.ip_whitelist_required }))}
-                  className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${form.ip_whitelist_required ? "bg-[#00d4ff]/80" : "bg-white/10"}`}
-                >
-                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.ip_whitelist_required ? "translate-x-4" : "translate-x-0"}`} />
-                </div>
-              </label>
-            </div>
-            <textarea
-              value={(form.allowed_ips ?? []).join("\n")}
-              onChange={(e) => {
-                const lines = e.target.value.split("\n").map((l) => l.trim()).filter(Boolean);
-                setForm((f) => ({ ...f, allowed_ips: lines.length > 0 ? lines : null }));
-              }}
-              rows={3}
-              placeholder={"One IP per line, e.g.\n185.220.101.47\n194.165.16.11"}
-              className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 resize-none font-mono placeholder:text-[#334155]"
-            />
-            {form.ip_whitelist_required && (!form.allowed_ips || form.allowed_ips.length === 0) && (
-              <p className="text-amber-400 text-xs mt-1">⚠ Enforcement is on but no IPs are listed — all postbacks will be blocked.</p>
-            )}
-          </div>
-
-          {/* ── Geo Routing ─────────────────────────────────────────────────── */}
-          <div className="md:col-span-2 pt-2 border-t border-white/5">
-            <h3 className="text-white/70 text-xs font-semibold uppercase tracking-widest mb-3">Geo Routing</h3>
+          {/* Endpoint & Auth */}
+          <Card>
+            <SectionTitle>Endpoint & Authentication</SectionTitle>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs text-[#94a3b8] mb-1.5">Allowed GEOs</label>
-                {form.allowed_geos && form.allowed_geos.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {form.allowed_geos.map((geo) => (
-                      <span key={geo} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-[#00d4ff]/10 text-[#00d4ff] border border-[#00d4ff]/20 font-mono">
-                        {geo}
-                      </span>
-                    ))}
-                  </div>
-                )}
+              <Input label="Integration name" value={(form.name as string) ?? ""} onChange={(v) => setF("name", v)} span2 />
+              <Input label="Endpoint URL" value={(form.endpoint_url as string) ?? ""} onChange={(v) => setF("endpoint_url", v)} mono span2 />
+              <Select label="Auth type" value={(form.auth_type as string) ?? "header_key"} onChange={(v) => setF("auth_type", v)}
+                options={[
+                  { value: "header_key",   label: "Header key" },
+                  { value: "bearer",       label: "Bearer token" },
+                  { value: "basic",        label: "Basic auth" },
+                  { value: "query_param",  label: "Query param" },
+                  { value: "multi_header", label: "Multi-header (JSON)" },
+                ]}
+              />
+              <Input label="Auth header / param name" value={(form.auth_header_name as string) ?? ""} onChange={(v) => setF("auth_header_name", v)} mono />
+              <div className="md:col-span-2">
+                <label className="block text-xs text-[#64748b] mb-1.5 font-medium">New credential <span className="text-[#334155] font-normal">(leave blank to keep existing)</span></label>
                 <input
-                  placeholder="Leave empty for all geos, or enter: ES, IT, UK"
-                  value={form.allowed_geos ? form.allowed_geos.join(", ") : ""}
-                  onChange={(e) => {
-                    const parsed = e.target.value.trim()
-                      ? e.target.value.split(",").map((g) => g.trim().toUpperCase()).filter(Boolean)
-                      : null;
-                    setForm((f) => ({ ...f, allowed_geos: parsed }));
-                  }}
-                  className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 font-mono"
+                  type="password"
+                  placeholder="Paste new credential to update…"
+                  onChange={(e) => setF("auth_credential", e.target.value)}
+                  className="bg-[#0d1117] border border-white/8 rounded-lg px-3 py-2 text-sm text-white w-full font-mono
+                    focus:outline-none focus:border-[#00d4ff]/40 transition-colors placeholder:text-[#334155]"
                 />
-                <p className="text-[#475569] text-xs mt-1">Comma-separated ISO-2 country codes. Empty = accept all geos.</p>
               </div>
-              <div>
-                <label className="block text-xs text-[#94a3b8] mb-1.5">Priority</label>
-                <input
-                  type="number"
-                  value={form.priority ?? 10}
-                  onChange={(e) => setForm((f) => ({ ...f, priority: parseInt(e.target.value, 10) || 10 }))}
-                  className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-                />
-                <p className="text-[#475569] text-xs mt-1">Lower number = higher priority when multiple integrations match a geo.</p>
-              </div>
-              <div>
-                <label className="block text-xs text-[#94a3b8] mb-1.5">Daily Cap (leads/day)</label>
-                <input
-                  type="number"
-                  placeholder="Leave empty for no cap"
-                  value={form.daily_cap ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, daily_cap: e.target.value ? parseInt(e.target.value, 10) : null }))}
-                  className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-                />
-                <p className="text-[#475569] text-xs mt-1">Max leads relayed to this buyer per calendar day (UTC). Leave empty for unlimited.</p>
-              </div>
-              {/* Relay Mode */}
-              <div className="col-span-2">
-                <label className="block text-xs text-[#94a3b8] mb-2">Relay Mode</label>
-                <div className="flex gap-3">
-                  {(["instant", "throttled"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setForm((f) => ({ ...f, relay_mode: mode }))}
-                      className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all ${
-                        form.relay_mode === mode
-                          ? mode === "instant"
-                            ? "bg-[#00d4ff]/10 border-[#00d4ff]/40 text-[#00d4ff]"
-                            : "bg-amber-500/10 border-amber-500/40 text-amber-400"
-                          : "bg-[#13131f] border-white/10 text-[#475569] hover:border-white/20"
-                      }`}
-                    >
-                      {mode === "instant" ? "⚡ Instant" : "🕐 Throttled"}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[#475569] text-xs mt-1.5">
-                  {form.relay_mode === "instant"
-                    ? "Leads are relayed to the buyer immediately as they arrive."
-                    : "Leads are queued and dripped to the buyer at the configured rate to mimic live traffic."}
-                </p>
-              </div>
-              {form.relay_mode === "throttled" && (
+            </div>
+          </Card>
+
+          {/* Response parsing */}
+          <Card>
+            <SectionTitle>Response Parsing</SectionTitle>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Select label="Content type" value={(form.content_type as string) ?? "json"} onChange={(v) => setF("content_type", v)}
+                options={[{ value: "json", label: "JSON" }, { value: "form_urlencoded", label: "Form URL-encoded" }]}
+              />
+              <Input label="Lead ID path" value={(form.response_lead_id_path as string) ?? ""} onChange={(v) => setF("response_lead_id_path", v)} mono
+                placeholder="e.g. id  or  details.leadRequest.ID" />
+              <Input label="Redirect URL path (optional)" value={(form.response_redirect_url_path as string) ?? ""} onChange={(v) => setF("response_redirect_url_path", v)} mono span2
+                placeholder="e.g. autologin" />
+            </div>
+          </Card>
+
+          {/* Relay settings */}
+          <Card>
+            <SectionTitle>Relay Settings</SectionTitle>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Select label="Status" value={(form.status as string) ?? "testing"} onChange={(v) => setF("status", v)}
+                options={[
+                  { value: "active",   label: "Active — relay live leads" },
+                  { value: "testing",  label: "Testing — paused" },
+                  { value: "inactive", label: "Inactive — disabled" },
+                ]}
+              />
+              <Select label="Relay mode" value={(form.relay_mode as string) ?? "instant"} onChange={(v) => setF("relay_mode", v)}
+                options={[{ value: "instant", label: "⚡ Instant" }, { value: "throttled", label: "🕐 Throttled" }]}
+              />
+              {(form.relay_mode === "throttled") && (
                 <div>
-                  <label className="block text-xs text-[#94a3b8] mb-1.5">Throttle Rate (leads/hour)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={1000}
-                    value={form.throttle_rate}
-                    onChange={(e) => setForm((f) => ({ ...f, throttle_rate: parseInt(e.target.value, 10) || 20 }))}
-                    className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-amber-500/40"
+                  <label className="block text-xs text-[#64748b] mb-1.5 font-medium">Throttle rate <span className="text-[#334155] font-normal">(leads/hour)</span></label>
+                  <input type="number" min={1} max={3600}
+                    value={(form.throttle_rate as number) ?? 20}
+                    onChange={(e) => setF("throttle_rate", parseInt(e.target.value) || 20)}
+                    className="bg-[#0d1117] border border-white/8 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
                   />
-                  <p className="text-[#475569] text-xs mt-1">e.g. 10 = ~1 lead every 6 minutes spread across the hour.</p>
+                  <p className="text-[#334155] text-xs mt-1">
+                    {(form.throttle_rate as number) ? `≈ 1 lead every ${Math.round(3600 / (form.throttle_rate as number))}s` : ""}
+                  </p>
                 </div>
               )}
+              <div>
+                <label className="block text-xs text-[#64748b] mb-1.5 font-medium">Daily cap <span className="text-[#334155] font-normal">(leave blank for unlimited)</span></label>
+                <input type="number" min={1}
+                  value={(form.daily_cap as number) ?? ""}
+                  onChange={(e) => setF("daily_cap", e.target.value ? parseInt(e.target.value) : null)}
+                  placeholder="e.g. 100"
+                  className="bg-[#0d1117] border border-white/8 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40 placeholder:text-[#334155]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[#64748b] mb-1.5 font-medium">Allowed geos <span className="text-[#334155] font-normal">(comma-separated ISO-2, blank = all)</span></label>
+                <input
+                  value={(form.allowed_geos as string[])?.join(", ") ?? ""}
+                  onChange={(e) => setF("allowed_geos", e.target.value ? e.target.value.split(",").map((g) => g.trim().toUpperCase()).filter(Boolean) : null)}
+                  placeholder="e.g. DE, IT, CH"
+                  className="bg-[#0d1117] border border-white/8 rounded-lg px-3 py-2 text-sm text-white w-full font-mono focus:outline-none focus:border-[#00d4ff]/40 placeholder:text-[#334155]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[#64748b] mb-1.5 font-medium">Priority <span className="text-[#334155] font-normal">(lower = picked first)</span></label>
+                <input type="number"
+                  value={(form.priority as number) ?? 10}
+                  onChange={(e) => setF("priority", parseInt(e.target.value) || 10)}
+                  className="bg-[#0d1117] border border-white/8 rounded-lg px-3 py-2 text-sm text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
+                />
+              </div>
             </div>
-          </div>
-        </div>
+          </Card>
 
-        <div className="flex justify-end mt-4">
+          {/* Notes */}
+          <Card>
+            <SectionTitle>Notes</SectionTitle>
+            <textarea
+              rows={3}
+              value={(form.notes as string) ?? ""}
+              onChange={(e) => setF("notes", e.target.value)}
+              placeholder="Deal terms, agreed rates, contact info…"
+              className="bg-[#080c14] border border-white/8 rounded-lg px-3 py-2.5 text-sm text-[#94a3b8] w-full
+                focus:outline-none focus:border-[#00d4ff]/40 resize-none placeholder:text-[#1e293b]"
+            />
+          </Card>
+
           <button
             onClick={saveIntegration}
             disabled={saving}
-            className="px-5 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg, #00d4ff, #7c3aed)" }}
+            className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-opacity"
+            style={{ background: "linear-gradient(135deg, #00d4ff22, #7c3aed22)", border: "1px solid rgba(0,212,255,0.3)" }}
           >
-            {saving ? "Saving…" : "Save Integration"}
+            {saving ? "Saving…" : "Save integration"}
           </button>
         </div>
-      </section>
+      )}
 
-      {/* ── Field Mappings ─────────────────────────────────────────────────── */}
-      <section className="glass rounded-2xl p-6 border border-white/5">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 className="text-white font-semibold">Field Mappings</h2>
-            <p className="text-[#475569] text-xs mt-0.5">Map Affinitrax lead fields to the buyer CRM&apos;s expected field names.</p>
+      {/* ══════════════════════════════════════════════════════════════════════
+          TAB: MAPPINGS
+      ══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === "Mappings" && (
+        <div className="space-y-4">
+          <p className="text-[#475569] text-xs">
+            Maps Affinitrax lead fields → buyer CRM field names. Static values use <span className="font-mono text-[#64748b]">default_value</span> with any affinitrax field name that won&apos;t exist on the lead.
+          </p>
+
+          {/* Header row */}
+          <div className="grid grid-cols-12 gap-2 px-1 text-[10px] font-semibold text-[#334155] uppercase tracking-wide">
+            <div className="col-span-3">Affinitrax field</div>
+            <div className="col-span-2">Buyer field</div>
+            <div className="col-span-2">Transform</div>
+            <div className="col-span-2">Default value</div>
+            <div className="col-span-1 text-center">Req</div>
+            <div className="col-span-2" />
           </div>
+
+          {mappings.map((m, idx) => (
+            <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-[#0d1117] border border-white/5 rounded-lg px-3 py-2.5">
+              <div className="col-span-3">
+                <select value={m.affinitrax_field} onChange={(e) => {
+                  setMappings((prev) => prev.map((x, i) => i === idx ? { ...x, affinitrax_field: e.target.value } : x));
+                }} className="bg-transparent text-sm text-[#94a3b8] w-full focus:outline-none font-mono">
+                  {AFFINITRAX_FIELDS.map((f) => <option key={f} value={f}>{f}</option>)}
+                  {!AFFINITRAX_FIELDS.includes(m.affinitrax_field) && (
+                    <option value={m.affinitrax_field}>{m.affinitrax_field}</option>
+                  )}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <input value={m.buyer_field} onChange={(e) => {
+                  setMappings((prev) => prev.map((x, i) => i === idx ? { ...x, buyer_field: e.target.value } : x));
+                }} className="bg-transparent text-sm text-white font-mono w-full focus:outline-none border-b border-white/10 focus:border-[#00d4ff]/40 pb-0.5" />
+              </div>
+              <div className="col-span-2">
+                <select value={m.transform} onChange={(e) => {
+                  setMappings((prev) => prev.map((x, i) => i === idx ? { ...x, transform: e.target.value } : x));
+                }} className="bg-transparent text-xs text-[#64748b] w-full focus:outline-none">
+                  {TRANSFORMS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <input value={m.default_value ?? ""} placeholder="—"
+                  onChange={(e) => {
+                    setMappings((prev) => prev.map((x, i) => i === idx ? { ...x, default_value: e.target.value || null } : x));
+                  }}
+                  className="bg-transparent text-sm text-[#64748b] font-mono w-full focus:outline-none border-b border-white/10 focus:border-[#00d4ff]/40 pb-0.5 placeholder:text-[#1e293b]"
+                />
+              </div>
+              <div className="col-span-1 flex justify-center">
+                <input type="checkbox" checked={m.required}
+                  onChange={(e) => setMappings((prev) => prev.map((x, i) => i === idx ? { ...x, required: e.target.checked } : x))}
+                  className="accent-[#00d4ff] w-4 h-4 cursor-pointer"
+                />
+              </div>
+              <div className="col-span-2 flex justify-end">
+                <button onClick={() => setMappings((prev) => prev.filter((_, i) => i !== idx))}
+                  className="text-[#334155] hover:text-red-400 transition-colors text-xs px-2 py-1">
+                  remove
+                </button>
+              </div>
+            </div>
+          ))}
+
           <button
-            onClick={addMapping}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#00d4ff] border border-[#00d4ff]/30 hover:bg-[#00d4ff]/10 transition-colors"
+            onClick={() => setMappings((prev) => [...prev, { affinitrax_field: "email", buyer_field: "", required: false, default_value: null, transform: "none", sort_order: prev.length }])}
+            className="w-full py-2.5 rounded-lg text-xs font-medium text-[#475569] border border-dashed border-white/10 hover:border-white/20 hover:text-[#94a3b8] transition-colors"
           >
-            + Add field
+            + Add mapping
+          </button>
+
+          <button onClick={saveMappings} disabled={saving}
+            className="w-full py-3 rounded-xl text-sm font-semibold text-white disabled:opacity-40"
+            style={{ background: "linear-gradient(135deg, #00d4ff22, #7c3aed22)", border: "1px solid rgba(0,212,255,0.3)" }}
+          >
+            {saving ? "Saving…" : "Save mappings"}
           </button>
         </div>
+      )}
 
-        {mappings.length === 0 ? (
-          <p className="text-[#334155] text-sm text-center py-4">No mappings — the raw lead payload will be sent as-is.</p>
-        ) : (
-          <div className="space-y-2">
-            <div className="grid grid-cols-12 gap-2 px-1 pb-1">
-              <div className="col-span-3 text-[10px] text-[#334155] uppercase tracking-widest font-semibold">Affinitrax Field</div>
-              <div className="col-span-3 text-[10px] text-[#334155] uppercase tracking-widest font-semibold">Buyer Field</div>
-              <div className="col-span-2 text-[10px] text-[#334155] uppercase tracking-widest font-semibold">Transform</div>
-              <div className="col-span-2 text-[10px] text-[#334155] uppercase tracking-widest font-semibold">Default</div>
-              <div className="col-span-1 text-[10px] text-[#334155] uppercase tracking-widest font-semibold">Req</div>
-              <div className="col-span-1" />
+      {/* ══════════════════════════════════════════════════════════════════════
+          TAB: KEYS
+      ══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === "Keys" && (
+        <div className="space-y-5">
+          <p className="text-[#475569] text-xs">
+            API keys authenticate sellers submitting leads to <span className="font-mono text-[#64748b]">POST /api/v1/leads</span> for this deal.
+          </p>
+
+          {/* Generate new key */}
+          <Card>
+            <SectionTitle>Generate new key</SectionTitle>
+            <div className="flex gap-3">
+              <input
+                value={newKeyLabel}
+                onChange={(e) => setNewKeyLabel(e.target.value)}
+                placeholder="Label (e.g. seller name)"
+                className="bg-[#080c14] border border-white/8 rounded-lg px-3 py-2 text-sm text-white flex-1
+                  focus:outline-none focus:border-[#00d4ff]/40 placeholder:text-[#334155]"
+              />
+              <button onClick={generateKey} disabled={generatingKey}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white border border-white/15 hover:border-white/30 transition-colors disabled:opacity-40 shrink-0">
+                {generatingKey ? "Generating…" : "Generate"}
+              </button>
             </div>
-            {mappings.map((m, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                <div className="col-span-3">
-                  <select
-                    value={m.affinitrax_field}
-                    onChange={(e) => updateMapping(i, "affinitrax_field", e.target.value)}
-                    className="bg-[#13131f] border border-white/10 rounded px-2 py-1.5 text-xs text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-                  >
-                    {AFFINITRAX_FIELDS.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </select>
+            {newKeyResult && (
+              <div className="mt-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                <p className="text-xs text-green-400 mb-1 font-medium">Copy now — shown once only</p>
+                <p className="font-mono text-xs text-green-300 break-all">{newKeyResult}</p>
+              </div>
+            )}
+          </Card>
+
+          {/* Keys list */}
+          <div className="space-y-2">
+            {apiKeys.length === 0 && (
+              <Card className="text-center py-8">
+                <p className="text-[#334155] text-sm">No API keys yet.</p>
+              </Card>
+            )}
+            {apiKeys.map((k) => (
+              <div key={k.id} className="flex items-center justify-between px-4 py-3 bg-[#0d1117] border border-white/5 rounded-lg">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${k.status === "active" ? "bg-green-400" : "bg-[#334155]"}`} />
+                  <div className="min-w-0">
+                    <p className="text-sm text-white font-medium">{k.label}</p>
+                    <p className="text-xs text-[#334155] font-mono">{k.key_prefix}…</p>
+                  </div>
                 </div>
-                <div className="col-span-3">
-                  <input
-                    value={m.buyer_field}
-                    onChange={(e) => updateMapping(i, "buyer_field", e.target.value)}
-                    placeholder="e.g. firstName"
-                    className="bg-[#13131f] border border-white/10 rounded px-2 py-1.5 text-xs text-white w-full focus:outline-none focus:border-[#00d4ff]/40 font-mono"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <select
-                    value={m.transform}
-                    onChange={(e) => updateMapping(i, "transform", e.target.value)}
-                    className="bg-[#13131f] border border-white/10 rounded px-2 py-1.5 text-xs text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-                  >
-                    {TRANSFORMS.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <input
-                    value={m.default_value ?? ""}
-                    onChange={(e) => updateMapping(i, "default_value", e.target.value || null)}
-                    placeholder="optional"
-                    className="bg-[#13131f] border border-white/10 rounded px-2 py-1.5 text-xs text-white w-full focus:outline-none focus:border-[#00d4ff]/40"
-                  />
-                </div>
-                <div className="col-span-1 flex justify-center">
-                  <input
-                    type="checkbox"
-                    checked={m.required}
-                    onChange={(e) => updateMapping(i, "required", e.target.checked)}
-                    className="w-3.5 h-3.5 accent-[#00d4ff]"
-                  />
-                </div>
-                <div className="col-span-1 flex justify-end">
-                  <button
-                    onClick={() => removeMapping(i)}
-                    className="text-[#475569] hover:text-red-400 transition-colors text-lg leading-none"
-                  >
-                    ×
-                  </button>
+                <div className="flex items-center gap-4 shrink-0">
+                  <span className="text-xs text-[#334155]">
+                    {k.last_used_at ? `Last used ${new Date(k.last_used_at).toLocaleDateString()}` : "Never used"}
+                  </span>
+                  {k.status === "active" && (
+                    <button onClick={() => revokeKey(k.id)}
+                      className="text-xs text-[#475569] hover:text-red-400 transition-colors px-2 py-1 rounded border border-transparent hover:border-red-500/20">
+                      Revoke
+                    </button>
+                  )}
+                  {k.status === "revoked" && (
+                    <span className="text-xs text-[#334155] px-2 py-1">Revoked</span>
+                  )}
                 </div>
               </div>
             ))}
           </div>
-        )}
-
-        <div className="flex justify-end mt-4">
-          <button
-            onClick={saveMappings}
-            disabled={saving}
-            className="px-5 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg, #00d4ff, #7c3aed)" }}
-          >
-            {saving ? "Saving…" : "Save Mappings"}
-          </button>
         </div>
-      </section>
+      )}
 
-      {/* ── API Keys ───────────────────────────────────────────────────────── */}
-      <section className="glass rounded-2xl p-6 border border-white/5">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 className="text-white font-semibold">Seller API Keys</h2>
-            <p className="text-[#475569] text-xs mt-0.5">Keys issued to sellers for this deal. Each key authenticates to <code className="text-[#475569] font-mono">POST /api/v1/leads</code>.</p>
-          </div>
-        </div>
-
-        {/* Generate new key */}
-        <div className="flex gap-3 mb-4">
-          <input
-            value={newKeyLabel}
-            onChange={(e) => setNewKeyLabel(e.target.value)}
-            placeholder="Key label (e.g. Main Seller)"
-            className="bg-[#13131f] border border-white/10 rounded-lg px-3 py-2 text-sm text-white flex-1 focus:outline-none focus:border-[#00d4ff]/40"
-          />
-          <button
-            onClick={generateKey}
-            disabled={generatingKey}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 whitespace-nowrap"
-            style={{ background: "linear-gradient(135deg, #00d4ff, #7c3aed)" }}
-          >
-            {generatingKey ? "Generating…" : "Generate Key"}
-          </button>
-        </div>
-
-        {/* Show new key once */}
-        {newKeyResult && (
-          <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-            <p className="text-amber-400 text-xs font-semibold mb-1.5">Save this key — it will not be shown again</p>
-            <code className="text-amber-300 text-xs font-mono break-all">{newKeyResult}</code>
-          </div>
-        )}
-
-        {/* Keys table */}
-        {apiKeys.length === 0 ? (
-          <p className="text-[#334155] text-sm text-center py-4">No API keys for this deal yet.</p>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-white/7">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/7">
-                  <th className="text-left px-4 py-2.5 text-[#475569] text-xs uppercase tracking-widest font-semibold">Label</th>
-                  <th className="text-left px-4 py-2.5 text-[#475569] text-xs uppercase tracking-widest font-semibold">Prefix</th>
-                  <th className="text-left px-4 py-2.5 text-[#475569] text-xs uppercase tracking-widest font-semibold">Status</th>
-                  <th className="text-left px-4 py-2.5 text-[#475569] text-xs uppercase tracking-widest font-semibold">Last used</th>
-                  <th className="px-4 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {apiKeys.map((k, i) => (
-                  <tr key={k.id} className={`border-b border-white/5 ${i === apiKeys.length - 1 ? "border-b-0" : ""}`}>
-                    <td className="px-4 py-2.5 text-white text-xs">{k.label}</td>
-                    <td className="px-4 py-2.5">
-                      <code className="text-[#94a3b8] text-xs font-mono">{k.key_prefix}…</code>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <StatusBadge status={k.status} />
-                    </td>
-                    <td className="px-4 py-2.5 text-[#475569] text-xs">
-                      {k.last_used_at ? new Date(k.last_used_at).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }) : "Never"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {k.status === "active" && (
-                        <button
-                          onClick={() => revokeKey(k.id)}
-                          className="text-xs text-red-400 hover:text-red-300 transition-colors"
-                        >
-                          Revoke
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
     </main>
   );
 }
