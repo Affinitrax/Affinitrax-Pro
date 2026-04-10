@@ -43,7 +43,7 @@ type DealIntegration = {
   id: string;
   deal_id: string;
   endpoint_url: string;
-  auth_type: "header_key" | "bearer" | "basic" | "query_param";
+  auth_type: "header_key" | "bearer" | "basic" | "query_param" | "multi_header";
   auth_header_name: string;
   auth_header_value_enc: string | null;
   content_type: "json" | "form_urlencoded";
@@ -104,6 +104,19 @@ function buildHeaders(
       break;
     case "query_param":
       // credential appended to URL in buildUrl()
+      break;
+    case "multi_header":
+      // credential is a JSON object: { "header-name": "value", ... }
+      if (credential) {
+        try {
+          const map = JSON.parse(credential) as Record<string, string>;
+          for (const [k, v] of Object.entries(map)) {
+            if (typeof v === "string") headers[k] = v;
+          }
+        } catch {
+          // malformed JSON — skip
+        }
+      }
       break;
   }
 
