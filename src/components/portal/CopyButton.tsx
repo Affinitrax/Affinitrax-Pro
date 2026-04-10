@@ -11,9 +11,13 @@ export default function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={copy}
-      className="text-xs px-2 py-1 rounded bg-[#13131f] border border-white/10 text-[#94a3b8] hover:text-white transition-colors"
+      className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-all ${
+        copied
+          ? "bg-green-500/15 text-green-400 border-green-500/30"
+          : "bg-white/5 text-[#94a3b8] border-white/8 hover:text-white hover:border-white/20"
+      }`}
     >
-      {copied ? "Copied ✓" : "Copy"}
+      {copied ? "✓ Copied" : "Copy"}
     </button>
   );
 }

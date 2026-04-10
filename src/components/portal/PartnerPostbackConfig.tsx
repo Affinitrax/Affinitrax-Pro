@@ -94,7 +94,7 @@ export default function PartnerPostbackConfig({ dealId }: { dealId: string }) {
     <div className="rounded-xl border border-white/7 overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 bg-white/3 border-b border-white/7">
         <span className="w-2 h-2 rounded-full bg-[#7c3aed]" />
-        <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">FTD Postback URLs</span>
+        <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Conversion Postback URLs</span>
         <span className="ml-auto text-xs text-[#334155]">Affinitrax fires these when a lead converts</span>
       </div>
 

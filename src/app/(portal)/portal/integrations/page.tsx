@@ -94,7 +94,8 @@ export default async function IntegrationsPage() {
   type IntegrationRow = { deal_id: string; name: string; status: string };
   type LeadRow = { deal_id: string };
 
-  const integrationMap: Record<string, IntegrationRow> = {};
+  // Map deal_id → array of integrations (a deal can have multiple buyers)
+  const integrationMap: Record<string, IntegrationRow[]> = {};
   const leadCountMap: Record<string, number> = {};
   const totalLeadMap: Record<string, number> = {};
 
@@ -105,7 +106,8 @@ export default async function IntegrationsPage() {
       .in("deal_id", dealIds);
 
     for (const i of (integrations as IntegrationRow[]) ?? []) {
-      integrationMap[i.deal_id] = i;
+      if (!integrationMap[i.deal_id]) integrationMap[i.deal_id] = [];
+      integrationMap[i.deal_id].push(i);
     }
 
     // Leads received in last 24 hours — exclude test leads for accurate stats
@@ -134,6 +136,8 @@ export default async function IntegrationsPage() {
     }
   }
 
+  const hasLiveDeals = typedDeals.some((d) => d.status === "active" || d.status === "matched");
+
   return (
     <main className="flex-1 p-8 max-w-5xl">
       {/* Header */}
@@ -144,8 +148,8 @@ export default async function IntegrationsPage() {
         </p>
       </div>
 
-      {/* How it works */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      {/* How it works — only shown when no live deals yet (onboarding state) */}
+      {!hasLiveDeals && <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {STEPS.map(step => (
           <div key={step.num} className={`glass rounded-2xl p-5 border ${step.border}`}>
             <div className={`w-10 h-10 rounded-xl ${step.bg} border ${step.border} flex items-center justify-center mb-4`} style={{ color: step.color }}>
@@ -158,7 +162,7 @@ export default async function IntegrationsPage() {
             <p className="text-xs text-[#475569] leading-relaxed">{step.desc}</p>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Per-deal cards */}
       {typedDeals.length === 0 ? (
@@ -189,7 +193,8 @@ export default async function IntegrationsPage() {
           {typedDeals.map((deal) => {
             const postbackUrl = `${BASE_URL}/api/postback?deal_id=${deal.id}&click_id={click_id}&event_type=ftd&revenue={revenue}&payout=PAYOUT_AMOUNT&geo={geo}`;
             const statusStyle = STATUS_STYLES[deal.status ?? ""] ?? "bg-gray-500/15 text-gray-400 border border-gray-500/30";
-            const relay = integrationMap[deal.id];
+            const relays = integrationMap[deal.id] ?? [];
+            const hasActiveRelay = relays.some((r) => r.status === "active");
             const leadsToday = leadCountMap[deal.id] ?? 0;
             const leadsTotal = totalLeadMap[deal.id] ?? 0;
 
@@ -285,15 +290,38 @@ export default async function IntegrationsPage() {
                 {/* ── Full integration tools — active / matched deals only ── */}
                 {isLive && (
                   <div className="p-6 space-y-5">
+                    {/* Lead stats — sell deals (sellers want to see their numbers) */}
+                    {deal.type !== "buy" && (leadsToday > 0 || leadsTotal > 0) && (
+                      <div className="rounded-xl border border-white/7 overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 bg-white/3 border-b border-white/7">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[#00d4ff]" />
+                            <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Leads Sent</span>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <div className="text-center">
+                              <div className="text-white font-bold text-sm leading-none">{leadsToday}</div>
+                              <div className="text-[#334155] text-[10px] mt-0.5">today</div>
+                            </div>
+                            <div className="w-px h-6 bg-white/7" />
+                            <div className="text-center">
+                              <div className="text-white font-bold text-sm leading-none">{leadsTotal}</div>
+                              <div className="text-[#334155] text-[10px] mt-0.5">all time</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Lead Relay Status — buy deals */}
                     {deal.type !== "sell" && (
                       <div className="rounded-xl border border-white/7 overflow-hidden">
                         <div className="flex items-center justify-between px-4 py-3 bg-white/3 border-b border-white/7">
                           <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full ${relay ? "bg-green-400" : "bg-[#334155]"}`} />
+                            <span className={`w-2 h-2 rounded-full ${hasActiveRelay ? "bg-green-400" : "bg-[#334155]"}`} />
                             <span className="text-xs font-semibold text-[#94a3b8] uppercase tracking-widest">Lead Relay</span>
                           </div>
-                          {relay && (
+                          {hasActiveRelay && (
                             <div className="flex items-center gap-4">
                               <div className="text-center">
                                 <div className="text-white font-bold text-sm leading-none">{leadsToday}</div>
@@ -308,7 +336,7 @@ export default async function IntegrationsPage() {
                           )}
                         </div>
                         <div className="px-4 py-3">
-                          {relay ? (
+                          {hasActiveRelay ? (
                             <div className="flex items-start gap-3">
                               <div className="w-7 h-7 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center shrink-0 mt-0.5">
                                 <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -404,19 +432,26 @@ export default async function IntegrationsPage() {
 
                       // null — intake method not yet decided by admin
                       return (
-                        <>
-                          <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-[#00d4ff]/15 bg-[#00d4ff]/[0.04]">
-                            <svg className="w-4 h-4 text-[#00d4ff] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-                            </svg>
-                            <p className="text-xs text-[#94a3b8] leading-relaxed">
-                              <span className="font-semibold text-[#00d4ff]">Intake method not confirmed.</span>{" "}
-                              Both options are shown below. Your account manager will confirm which one to use — tracking link for redirect-based traffic, or S2S API for server-to-server posting.
-                            </p>
+                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 overflow-hidden">
+                          <div className="flex items-start gap-3 px-4 py-4">
+                            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                              <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <p className="text-amber-400 text-sm font-semibold">Intake method pending</p>
+                              <p className="text-[#475569] text-xs mt-1 leading-relaxed">
+                                Your account manager will confirm whether to use a tracking link or S2S API for this deal.
+                                Both options are available below — set up whichever your account manager instructs.
+                              </p>
+                            </div>
                           </div>
-                          {trackingLinkBlock}
-                          {apiKeyBlock}
-                        </>
+                          <div className="border-t border-amber-500/10 p-4 space-y-4">
+                            {trackingLinkBlock}
+                            {apiKeyBlock}
+                          </div>
+                        </div>
                       );
                     })()}
 
