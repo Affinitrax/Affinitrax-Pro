@@ -55,12 +55,14 @@ export async function POST(
       return { data: ids };
     });
 
-  // Pick the oldest parked lead matching this integration's geo that was never attempted
+  // Pick the oldest parked lead matching this integration's geo that was never attempted.
+  // Double-gate: relay_attempts=0 (counter) AND no relay_attempt event (log).
   let query = admin
     .from("leads")
     .select("id, email, first_name, last_name, phone, country, ip, click_id, sub1, sub2, sub3")
     .eq("deal_id", integration.deal_id)
     .eq("status", "parked")
+    .eq("relay_attempts", 0)
     .order("created_at", { ascending: true })
     .limit(1);
 
