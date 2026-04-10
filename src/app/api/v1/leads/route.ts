@@ -271,23 +271,36 @@ export async function POST(req: Request) {
 
   const isTest = body.is_test === true || deal.test_mode === true;
 
+  // ── Duplicate email hard-block (lifetime per deal) ───────────────────────
+  if (!isTest) {
+    const { data: existingLead } = await admin
+      .from("leads")
+      .select("id, status")
+      .eq("deal_id", apiKey.deal_id)
+      .eq("email", email)
+      .eq("is_test", false)
+      .limit(1)
+      .single();
+
+    if (existingLead) {
+      // Return silently — seller gets back the original lead_id, no new record created
+      return NextResponse.json({
+        lead_id: existingLead.id,
+        status: "in_progress",
+        redirect_url: null,
+      });
+    }
+  }
+
   // ── Traffic quality checks (non-blocking) ────────────────────────────────
   const qualityFlags: string[] = [];
 
   if (!isTest) {
-    const oneDayAgo  = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count: emailDupCount } = await admin
-      .from("leads")
-      .select("id", { count: "exact", head: true })
-      .eq("deal_id", apiKey.deal_id)
-      .eq("email", email)
-      .eq("is_test", false)
-      .gte("created_at", oneDayAgo);
-
-    if ((emailDupCount ?? 0) > 0) qualityFlags.push("duplicate_email_24h");
-
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const leadIp     = typeof body.ip === "string" ? body.ip : ip;
+
+    const leadIp     = typeof body.ip === "string" ? body.ip : ip;
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count: ipDupCount } = await admin
       .from("leads")
       .select("id", { count: "exact", head: true })
