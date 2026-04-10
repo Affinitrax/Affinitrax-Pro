@@ -296,9 +296,6 @@ export async function POST(req: Request) {
   const qualityFlags: string[] = [];
 
   if (!isTest) {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-    const leadIp     = typeof body.ip === "string" ? body.ip : ip;
-
     const leadIp     = typeof body.ip === "string" ? body.ip : ip;
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const { count: ipDupCount } = await admin
