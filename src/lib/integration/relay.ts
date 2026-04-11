@@ -344,7 +344,11 @@ export async function relayLead(
           const successVal = extractByPath(parsed, integration.response_success_path);
           if (successVal !== (integration.response_success_value ?? "true")) {
             // Buyer body signals failure despite HTTP 2xx — treat as relay error
-            const msg = extractByPath(parsed, "message") ?? "Buyer rejected lead";
+            const msg =
+              extractByPath(parsed, "message") ??
+              extractByPath(parsed, "data") ??
+              extractByPath(parsed, "error") ??
+              "Buyer rejected lead";
             relayError = `Buyer rejected: ${msg}`;
           }
         }
