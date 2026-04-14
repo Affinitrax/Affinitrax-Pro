@@ -273,8 +273,13 @@ export async function relayLead(
   }
 
   // 5. Apply field mappings
+  // Inject special system fields so integrations can map them via affinitrax_field
+  const enrichedPayload: Record<string, string | null | undefined> = {
+    ...(payload as Record<string, string | null | undefined>),
+    _lead_id: leadId,   // maps to buyer "affclickid" / "click_id" / etc.
+  };
   const { mapped, missingRequired } = applyFieldMappings(
-    payload as Record<string, string | null | undefined>,
+    enrichedPayload,
     mappings ?? []
   );
 
