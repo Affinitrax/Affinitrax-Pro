@@ -227,7 +227,9 @@ async function handlePostback(request: NextRequest): Promise<Response> {
           .limit(1);
 
         if (buyer_lead_id) {
-          leadQuery = leadQuery.eq("buyer_lead_id", buyer_lead_id);
+          // buyer_lead_id can be the buyer's CRM ID (stored in leads.buyer_lead_id)
+          // OR our internal lead UUID echoed back via affclickid / similar macros.
+          leadQuery = leadQuery.or(`buyer_lead_id.eq.${buyer_lead_id},id.eq.${buyer_lead_id}`);
         } else {
           leadQuery = leadQuery.eq("click_id", click_id!);
         }
