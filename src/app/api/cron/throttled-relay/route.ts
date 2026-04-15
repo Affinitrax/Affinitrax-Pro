@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   // Find all throttled active integrations that have queued leads
   const { data: integrations } = await admin
     .from("deal_integrations")
-    .select("id, deal_id, throttle_rate")
+    .select("id, deal_id, throttle_rate, daily_cap")
     .eq("relay_mode", "throttled")
     .eq("status", "active");
 
@@ -57,6 +57,19 @@ export async function GET(request: NextRequest) {
     const slots = integration.throttle_rate - relayedThisHour;
 
     if (slots <= 0) continue; // rate cap hit for this hour
+
+    // Enforce daily cap if set
+    if (integration.daily_cap !== null) {
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const { count: todayCount } = await admin
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("integration_id", integration.id)
+        .in("status", ["relayed", "ftd"])
+        .gte("relayed_at", todayStart.toISOString());
+      if ((todayCount ?? 0) >= integration.daily_cap) continue; // daily cap hit
+    }
 
     // Minimum interval between leads: e.g. throttle_rate=20 → 180s between leads
     const intervalSeconds = Math.round(3600 / integration.throttle_rate);
