@@ -219,12 +219,12 @@ async function handlePostback(request: NextRequest): Promise<Response> {
         const admin2 = createAdminClient();
 
         // Find lead by buyer_lead_id (BetLeads-style) OR click_id + deal_id
+        // Note: use maybeSingle() — .single() errors on 0 rows, breaking silent FTD updates.
         let leadQuery = admin2
           .from("leads")
           .select("id, sub1, sub2, sub3, buyer_lead_id, click_id")
           .eq("deal_id", deal_id)
-          .order("created_at", { ascending: false })
-          .limit(1);
+          .order("created_at", { ascending: false });
 
         if (buyer_lead_id) {
           // buyer_lead_id can be the buyer's CRM ID (stored in leads.buyer_lead_id)
@@ -234,7 +234,7 @@ async function handlePostback(request: NextRequest): Promise<Response> {
           leadQuery = leadQuery.eq("click_id", click_id!);
         }
 
-        const { data: lead } = await leadQuery.single();
+        const { data: lead } = await leadQuery.limit(1).maybeSingle();
 
         if (lead) {
           // Update FTD timestamp if applicable
