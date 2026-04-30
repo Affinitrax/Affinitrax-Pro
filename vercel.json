@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/throttled-relay",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/blumquist-ftd-sync",
+      "schedule": "0 * * * *"
     }
   ]
 }
