@@ -38,6 +38,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { relayLead } from "@/lib/integration/relay";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { isTestPatternEmail } from "@/lib/integration/email-quality";
 
 /** Maps internal relay states to the partner-safe status surface. */
 function sanitizeStatus(s: string, ftdLabel = "ftd"): string {
@@ -269,7 +270,12 @@ export async function POST(req: Request) {
   const rawClickId = typeof body.click_id === "string" ? body.click_id.trim() : null;
   const click_id   = rawClickId && isValidClickId(rawClickId) ? rawClickId : null;
 
-  const isTest = body.is_test === true || deal.test_mode === true;
+  // ── Test email auto-detection ─────────────────────────────────────────────
+  // Sellers occasionally mix test/disposable emails into production feeds.
+  // Force is_test=true for any email matching known test patterns so these
+  // leads are never relayed to buyers.
+  const emailIsTestPattern = isTestPatternEmail(email);
+  const isTest = body.is_test === true || deal.test_mode === true || emailIsTestPattern;
 
   // ── Duplicate email hard-block (lifetime per deal) ───────────────────────
   if (!isTest) {
@@ -294,6 +300,9 @@ export async function POST(req: Request) {
 
   // ── Traffic quality checks (non-blocking) ────────────────────────────────
   const qualityFlags: string[] = [];
+
+  // Flag test-pattern emails regardless of isTest source
+  if (emailIsTestPattern) qualityFlags.push("test_email");
 
   if (!isTest) {
     const leadIp     = typeof body.ip === "string" ? body.ip : ip;
@@ -328,6 +337,7 @@ export async function POST(req: Request) {
       sub3:    typeof body.sub3 === "string" ? body.sub3 : null,
       is_test: isTest,
       status:  "received",
+      quality_flags: qualityFlags.length > 0 ? qualityFlags : null,
     })
     .select("id")
     .single();

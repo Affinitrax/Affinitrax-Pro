@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/blumquist-ftd-sync",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/wildcash-ftd-sync",
+      "schedule": "0 * * * *"
     }
   ]
 }

@@ -97,16 +97,23 @@ export async function GET(request: NextRequest) {
     // Send exactly 1 lead this tick (interval gate ensures correct spacing)
     const toProcess = 1;
 
-    // Fetch next queued leads for this integration (oldest first)
-    const { data: queuedLeads } = await admin
+    // Fetch next queued leads for this integration (oldest first).
+    // Fetch a small buffer then filter test_email flags in JS — avoids the
+    // PostgREST NULL trap: `NOT (NULL @> array)` evaluates to NULL (falsy),
+    // which would silently drop every lead whose quality_flags is NULL.
+    const { data: rawQueuedLeads } = await admin
       .from("leads")
-      .select("id, deal_id, email, first_name, last_name, phone, country, ip, click_id, sub1, sub2, sub3")
+      .select("id, deal_id, email, first_name, last_name, phone, country, ip, click_id, sub1, sub2, sub3, quality_flags")
       .eq("integration_id", integration.id)
       .eq("status", "queued")
       .order("created_at", { ascending: true })
-      .limit(toProcess);
+      .limit(toProcess + 20);
 
-    if (!queuedLeads || queuedLeads.length === 0) continue;
+    const queuedLeads = (rawQueuedLeads ?? [])
+      .filter(l => !Array.isArray(l.quality_flags) || !(l.quality_flags as string[]).includes("test_email"))
+      .slice(0, toProcess);
+
+    if (queuedLeads.length === 0) continue;
 
     for (const lead of queuedLeads) {
       await relayLead(lead.id, lead.deal_id, {
