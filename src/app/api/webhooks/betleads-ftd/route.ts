@@ -47,14 +47,29 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Look up lead by buyer_lead_id (what BetLeads calls signupID)
-  const { data: lead, error: leadErr } = await admin
+  // Look up lead by buyer_lead_id first, then fall back to our internal lead UUID
+  // (BetLeads echoes back whatever we sent as custom1 — which is our _lead_id / internal UUID)
+  let lead = null;
+
+  const { data: byBuyerLeadId } = await admin
     .from("leads")
     .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id, ftd_at")
     .eq("buyer_lead_id", signupId)
     .maybeSingle();
 
-  if (leadErr || !lead) {
+  if (byBuyerLeadId) {
+    lead = byBuyerLeadId;
+  } else {
+    // Fallback: signupID may be our internal lead UUID (sent as custom1 in the relay payload)
+    const { data: byId } = await admin
+      .from("leads")
+      .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id, ftd_at")
+      .eq("id", signupId)
+      .maybeSingle();
+    lead = byId ?? null;
+  }
+
+  if (!lead) {
     // Return 200 so BetLeads doesn't retry — log but don't alarm
     console.warn(`[betleads-ftd] Lead not found for signupID=${signupId}`);
     return NextResponse.json({ status: "not_found", signupId }, { status: 200 });
