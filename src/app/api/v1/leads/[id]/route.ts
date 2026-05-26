@@ -60,13 +60,12 @@ export async function GET(
     return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   }
 
-  // Sanitize status — never expose internal relay states (parked, relaying, failed details)
-  // to sellers. Map to a partner-safe status surface.
+  // Sanitize status — never expose internal relay states or FTD conversions to sellers.
+  // FTD is an internal metric (buyer conversion tracking) — sellers see "in_progress".
   function sanitizeStatus(s: string): string {
-    if (s === "ftd") return "ftd";
     if (s === "rejected") return "rejected";
-    if (s === "relayed") return "relayed";
-    // received / relaying / parked / failed all appear as "in_progress" to seller
+    if (s === "relayed" || s === "ftd") return "relayed";
+    // received / relaying / parked / failed / ftd all appear as "in_progress" to seller
     return "in_progress";
   }
 
@@ -74,7 +73,7 @@ export async function GET(
     lead_id:      lead.id,
     status:       sanitizeStatus(lead.status),
     redirect_url: lead.redirect_url,
-    ftd_at:       lead.ftd_at,
+    ftd_at:       null, // never expose FTD timestamp to seller
     is_test:      lead.is_test,
     created_at:   lead.created_at,
   });
