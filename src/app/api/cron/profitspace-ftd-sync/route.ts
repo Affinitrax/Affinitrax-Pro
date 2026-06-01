@@ -33,13 +33,13 @@ function proxyFetch(url: string, init: RequestInit): Promise<Response> {
 }
 
 type ProfitspaceConversion = {
-  leadRequestID: string;       // matches our buyer_lead_id
-  leadRequestIDEncoded: string;
-  qualified: number;           // 1 = FTD confirmed
+  leadRequestID: string;        // numeric integer ID (not used for matching)
+  leadRequestIDEncoded: string; // encoded ID — matches our buyer_lead_id
+  qualified: number;            // 1 = FTD confirmed
   amount: number;
   currency: string;
   depositDate: string;
-  customerID: string;          // lead email
+  customerID: string;           // lead email
   countryCode: string;
 };
 
@@ -113,8 +113,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 502 });
   }
 
-  // Only process qualified (FTD confirmed) conversions
-  const ftdConversions = conversions.filter((c) => c.qualified === 1 && c.leadRequestID);
+  // Only process qualified (FTD confirmed) conversions with an encoded ID to match on
+  const ftdConversions = conversions.filter((c) => c.qualified === 1 && c.leadRequestIDEncoded);
 
   if (ftdConversions.length === 0) {
     return NextResponse.json({ synced: 0, already_ftd: 0, total_fetched: conversions.length });
@@ -125,11 +125,12 @@ export async function GET(request: NextRequest) {
   let notFound = 0;
 
   for (const conv of ftdConversions) {
-    // Match by leadRequestID — this is what we stored as buyer_lead_id on relay
+    // Match by leadRequestIDEncoded — this is what Profitspace returns as
+    // details.leadRequest.ID on registration, which we store as buyer_lead_id
     const { data: lead } = await admin
       .from("leads")
       .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id")
-      .eq("buyer_lead_id", conv.leadRequestID)
+      .eq("buyer_lead_id", conv.leadRequestIDEncoded)
       .maybeSingle();
 
     if (!lead) {
@@ -158,6 +159,7 @@ export async function GET(request: NextRequest) {
       event_type: "ftd_received",
       endpoint: null,
       payload: {
+        leadRequestIDEncoded: conv.leadRequestIDEncoded,
         leadRequestID: conv.leadRequestID,
         amount: conv.amount,
         currency: conv.currency,
