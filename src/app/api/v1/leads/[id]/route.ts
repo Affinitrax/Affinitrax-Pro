@@ -61,11 +61,13 @@ export async function GET(
   }
 
   // Sanitize status — never expose internal relay states or FTD conversions to sellers.
-  // FTD is an internal metric (buyer conversion tracking) — sellers see "in_progress".
+  // FTD is an internal Affinitrax metric (buyer conversion tracking) — purely internal.
+  // Sellers only ever see: "rejected", "relayed", or "in_progress".
   function sanitizeStatus(s: string): string {
     if (s === "rejected") return "rejected";
-    if (s === "relayed" || s === "ftd") return "relayed";
-    // received / relaying / parked / failed / ftd all appear as "in_progress" to seller
+    if (s === "relayed") return "relayed";
+    // ftd / received / relaying / parked / failed → all "in_progress" to seller
+    // FTD especially must never leak — it's an internal conversion signal
     return "in_progress";
   }
 
