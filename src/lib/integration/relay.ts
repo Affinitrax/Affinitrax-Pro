@@ -240,17 +240,19 @@ export async function relayLead(
       return { success: false, relay_error: "parked" };
     }
 
-    // 2. If throttled mode — queue and let cron worker relay it later
-    if (integration.relay_mode === "throttled") {
-      await admin
-        .from("leads")
-        .update({ status: "queued", integration_id: integration.id })
-        .eq("id", leadId);
-      await logEvent(leadId, "inbound", "lead_queued", {
-        payload: { integration_id: integration.id, throttle_rate: integration.throttle_rate },
-      });
-      return { success: true, relay_error: undefined };
-    }
+    // 2. Queue lead and let cron worker relay it — both instant and throttled
+    //    modes use this path. Instant = cron fires within ~60s with no rate
+    //    limiting. Throttled = cron fires at configured leads/hour.
+    //    Firing inline (instant) caused Vercel timeout failures because
+    //    Profitspace takes 5-11s and Vercel's function limit is 10s.
+    await admin
+      .from("leads")
+      .update({ status: "queued", integration_id: integration.id })
+      .eq("id", leadId);
+    await logEvent(leadId, "inbound", "lead_queued", {
+      payload: { integration_id: integration.id, relay_mode: integration.relay_mode, throttle_rate: integration.throttle_rate },
+    });
+    return { success: true, relay_error: undefined };
   } // end normal path
 
   // 3. Load field mappings

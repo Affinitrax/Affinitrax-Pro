@@ -31,11 +31,11 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient();
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
-  // Find all throttled active integrations that have queued leads
+  // Find all active integrations (both instant + throttled) that have queued leads
   const { data: integrations } = await admin
     .from("deal_integrations")
-    .select("id, deal_id, throttle_rate, daily_cap")
-    .eq("relay_mode", "throttled")
+    .select("id, deal_id, throttle_rate, daily_cap, relay_mode")
+    .in("relay_mode", ["throttled", "instant"])
     .eq("status", "active");
 
   if (!integrations || integrations.length === 0) {
@@ -45,20 +45,9 @@ export async function GET(request: NextRequest) {
   let totalProcessed = 0;
 
   for (const integration of integrations) {
-    // Count relayed leads in last hour for this integration
-    const { count: recentCount } = await admin
-      .from("leads")
-      .select("id", { count: "exact", head: true })
-      .eq("integration_id", integration.id)
-      .eq("status", "relayed")
-      .gte("relayed_at", hourAgo);
+    const isInstant = integration.relay_mode === "instant";
 
-    const relayedThisHour = recentCount ?? 0;
-    const slots = integration.throttle_rate - relayedThisHour;
-
-    if (slots <= 0) continue; // rate cap hit for this hour
-
-    // Enforce daily cap if set
+    // Enforce daily cap if set (applies to both instant and throttled)
     if (integration.daily_cap !== null) {
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
@@ -71,31 +60,44 @@ export async function GET(request: NextRequest) {
       if ((todayCount ?? 0) >= integration.daily_cap) continue; // daily cap hit
     }
 
-    // Minimum interval between leads: e.g. throttle_rate=20 → 180s between leads
-    const intervalSeconds = Math.round(3600 / integration.throttle_rate);
-    const intervalMs = intervalSeconds * 1000;
+    if (!isInstant) {
+      // Throttled: enforce hourly rate cap
+      const { count: recentCount } = await admin
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("integration_id", integration.id)
+        .eq("status", "relayed")
+        .gte("relayed_at", hourAgo);
 
-    // Check when the last lead was relayed for this integration
-    const { data: lastRelayed } = await admin
-      .from("leads")
-      .select("relayed_at")
-      .eq("integration_id", integration.id)
-      .eq("status", "relayed")
-      .order("relayed_at", { ascending: false })
-      .limit(1)
-      .single();
+      const relayedThisHour = recentCount ?? 0;
+      const slots = integration.throttle_rate - relayedThisHour;
+      if (slots <= 0) continue; // rate cap hit for this hour
 
-    const lastRelayedAt = lastRelayed?.relayed_at
-      ? new Date(lastRelayed.relayed_at).getTime()
-      : 0;
-    const msSinceLast = Date.now() - lastRelayedAt;
+      // Minimum interval between leads: e.g. throttle_rate=20 → 180s between leads
+      const intervalSeconds = Math.round(3600 / integration.throttle_rate);
+      const intervalMs = intervalSeconds * 1000;
 
-    // Add small jitter (±15s) so leads don't fire on exactly the same second each time
-    const jitterMs = (Math.random() - 0.5) * 30_000;
-    if (msSinceLast < intervalMs + jitterMs) continue; // not time yet
+      const { data: lastRelayed } = await admin
+        .from("leads")
+        .select("relayed_at")
+        .eq("integration_id", integration.id)
+        .eq("status", "relayed")
+        .order("relayed_at", { ascending: false })
+        .limit(1)
+        .single();
 
-    // Send exactly 1 lead this tick (interval gate ensures correct spacing)
-    const toProcess = 1;
+      const lastRelayedAt = lastRelayed?.relayed_at
+        ? new Date(lastRelayed.relayed_at).getTime()
+        : 0;
+      const msSinceLast = Date.now() - lastRelayedAt;
+
+      // Add small jitter (±15s) so leads don't fire on exactly the same second each time
+      const jitterMs = (Math.random() - 0.5) * 30_000;
+      if (msSinceLast < intervalMs + jitterMs) continue; // not time yet
+    }
+
+    // Instant: fire ALL queued leads this tick. Throttled: exactly 1.
+    const toProcess = isInstant ? 1000 : 1;
 
     // Fetch next queued leads for this integration (oldest first).
     // Fetch a small buffer then filter test_email flags in JS — avoids the
