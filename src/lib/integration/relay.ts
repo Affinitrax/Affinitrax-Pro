@@ -14,6 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "./crypto";
 import { applyFieldMappings, extractByPath } from "./field-mapper";
 import { firePostback } from "./postback-relay";
+import { sendTelegramMessage } from "@/lib/telegram";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 
 /** Outbound fetch — routed through Contabo proxy if FIXIE_URL is set.
@@ -41,6 +42,7 @@ function proxyFetch(url: string, init: RequestInit): Promise<Response> {
 
 type DealIntegration = {
   id: string;
+  name: string;
   deal_id: string;
   endpoint_url: string;
   auth_type: "header_key" | "bearer" | "basic" | "query_param" | "multi_header";
@@ -408,7 +410,17 @@ export async function relayLead(
     })
     .eq("id", leadId);
 
-  // 7. Fire seller postback for "lead" event (if configured)
+  // 7. Fire Telegram relay success notification
+  if (success) {
+    const dealShort = dealId.slice(0, 8);
+    sendTelegramMessage(
+      `✅ Lead relayed — deal ${dealShort}\n` +
+      `Email: ${payload.email}${payload.country ? ` · ${payload.country.toUpperCase()}` : ""}\n` +
+      `Buyer: ${integration.name ?? integration.id.slice(0, 8)}`
+    ).catch(() => {});
+  }
+
+  // 8. Fire seller postback for "lead" event (if configured)
   if (success) {
     const { data: postbackConfigs } = await admin
       .from("deal_postback_configs")
