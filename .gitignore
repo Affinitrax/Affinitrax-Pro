@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local test/debug scripts (may contain hardcoded keys)
+/scripts/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
