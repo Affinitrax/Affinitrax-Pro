@@ -12,7 +12,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "./crypto";
-import { applyFieldMappings, extractByPath } from "./field-mapper";
+import { applyFieldMappings, extractByPath, buildNestedPayload } from "./field-mapper";
 import { firePostback } from "./postback-relay";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
@@ -302,7 +302,11 @@ export async function relayLead(
   let bodyStr: string;
   if (integration.content_type === "json") {
     headers["Content-Type"] = "application/json";
-    bodyStr = JSON.stringify(mapped);
+    // If any buyer_field uses dot-notation (e.g. "profile.firstName"),
+    // build a nested object before serialising.
+    const hasNested = Object.keys(mapped).some((k) => k.includes("."));
+    const payload = hasNested ? buildNestedPayload(mapped) : mapped;
+    bodyStr = JSON.stringify(payload);
   } else {
     headers["Content-Type"] = "application/x-www-form-urlencoded";
     bodyStr = new URLSearchParams(mapped).toString();

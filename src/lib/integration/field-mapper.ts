@@ -82,6 +82,33 @@ export function applyFieldMappings(
 }
 
 /**
+ * Converts a flat object with dot-notation keys into a nested object.
+ * e.g. { "profile.firstName": "John" } → { profile: { firstName: "John" } }
+ * Used for buyer CRMs that require nested JSON (e.g. Ocean/Hypernet).
+ */
+export function buildNestedPayload(
+  flat: Record<string, string>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(flat)) {
+    if (!key.includes(".")) {
+      result[key] = value;
+      continue;
+    }
+    const parts = key.split(".");
+    let current = result;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!current[parts[i]] || typeof current[parts[i]] !== "object") {
+        current[parts[i]] = {};
+      }
+      current = current[parts[i]] as Record<string, unknown>;
+    }
+    current[parts[parts.length - 1]] = value;
+  }
+  return result;
+}
+
+/**
  * Extract a nested value from an object using dot-notation path.
  * e.g. path="details.leadRequest.ID" on { details: { leadRequest: { ID: "123" } } }
  */
