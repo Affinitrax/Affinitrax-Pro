@@ -575,8 +575,11 @@ export default function IntegrationDetailPage() {
                       {lead.country && <span className="text-[#334155] shrink-0 font-mono">{lead.country}</span>}
                     </div>
                     <div className="flex items-center gap-4 shrink-0 ml-3">
-                      {lead.buyer_lead_id && (
+                      {lead.buyer_lead_id && (lead.status === "relayed" || lead.status === "ftd") && (
                         <span className="text-green-400 font-mono">#{lead.buyer_lead_id.slice(0, 12)}</span>
+                      )}
+                      {lead.buyer_lead_id && lead.status !== "relayed" && lead.status !== "ftd" && (
+                        <span className="text-[#334155] font-mono line-through text-[10px]">stale id</span>
                       )}
                       {lead.relay_error && (
                         <span className="text-red-400 max-w-[180px] truncate">{lead.relay_error}</span>

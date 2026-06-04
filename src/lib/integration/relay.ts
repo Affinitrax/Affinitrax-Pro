@@ -247,9 +247,18 @@ export async function relayLead(
     //    limiting. Throttled = cron fires at configured leads/hour.
     //    Firing inline (instant) caused Vercel timeout failures because
     //    Profitspace takes 5-11s and Vercel's function limit is 10s.
+    //
+    //    Clear stale relay data from any previous integration attempt so the
+    //    portal never shows a ghost buyer_lead_id from a different buyer.
     await admin
       .from("leads")
-      .update({ status: "queued", integration_id: integration.id })
+      .update({
+        status: "queued",
+        integration_id: integration.id,
+        buyer_lead_id: null,
+        relay_error: null,
+        relayed_at: null,
+      })
       .eq("id", leadId);
     await logEvent(leadId, "inbound", "lead_queued", {
       payload: { integration_id: integration.id, relay_mode: integration.relay_mode, throttle_rate: integration.throttle_rate },
