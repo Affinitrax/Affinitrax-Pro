@@ -198,34 +198,27 @@ export default async function DashboardPage() {
 
   const { data: partnerDeals } = await supabase
     .from("deals")
-    .select("id, vertical, type, geos, model, status, created_at, expose_ftd")
+    .select("id, vertical, type, geos, model, status, created_at")
     .eq("requester_id", user.id)
     .order("created_at", { ascending: false })
     .limit(10);
 
-  type Deal = { id: string; vertical: string | null; type: string | null; geos: string[] | null; model: string | null; status: string | null; created_at: string | null; expose_ftd: boolean };
+  type Deal = { id: string; vertical: string | null; type: string | null; geos: string[] | null; model: string | null; status: string | null; created_at: string | null };
   const deals = (partnerDeals as Deal[]) ?? [];
   const dealIds = deals.map(d => d.id);
 
-  // Fetch postback events with deal_id so we can gate by expose_ftd
   const { data: pbEvents } = await supabase
     .from("postback_events")
-    .select("deal_id, event_type, revenue, payout")
+    .select("event_type, revenue, payout")
     .in("deal_id", dealIds.length > 0 ? dealIds : ["00000000-0000-0000-0000-000000000000"]);
 
-  // Build expose_ftd map for quick lookup
-  const exposeFtdMap: Record<string, boolean> = {};
-  for (const d of deals) exposeFtdMap[d.id] = d.expose_ftd;
-
-  // Only count FTD events for deals where expose_ftd=true
-  const ftdEvents = (pbEvents ?? []).filter((e: { deal_id: string; event_type: string | null }) =>
-    ["ftd", "conversion", "deposit"].includes(e.event_type ?? "") && exposeFtdMap[e.deal_id]
+  const ftdEvents = (pbEvents ?? []).filter((e: { event_type: string | null }) =>
+    ["ftd", "conversion", "deposit"].includes(e.event_type ?? "")
   );
   const totalRevenue = ftdEvents.reduce((s: number, e: { revenue: number | null }) => s + (Number(e.revenue) || 0), 0);
   const totalPayout = ftdEvents.reduce((s: number, e: { payout: number | null }) => s + (Number(e.payout) || 0), 0);
   const activeCount = deals.filter(d => d.status === "active").length;
   const ftdCount = ftdEvents.length;
-  const anyFtdExposed = deals.some(d => d.expose_ftd);
 
   return (
     <main className="flex-1 p-8">
@@ -248,24 +241,22 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className={`grid gap-4 mb-8 ${anyFtdExposed ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 lg:grid-cols-3"}`}>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="glass rounded-xl p-5">
           <p className="text-xs text-[#94a3b8] uppercase tracking-widest mb-1">Active Deals</p>
           <p className="text-2xl font-bold text-white font-display">{activeCount}</p>
         </div>
-        {anyFtdExposed && (
-          <div className="glass rounded-xl p-5">
-            <p className="text-xs text-[#94a3b8] uppercase tracking-widest mb-1">FTDs Tracked</p>
-            <p className="text-2xl font-bold text-[#f59e0b] font-display">{ftdCount}</p>
-          </div>
-        )}
+        <div className="glass rounded-xl p-5">
+          <p className="text-xs text-[#94a3b8] uppercase tracking-widest mb-1">FTDs Tracked</p>
+          <p className="text-2xl font-bold text-[#f59e0b] font-display">{ftdCount}</p>
+        </div>
         <div className="glass rounded-xl p-5">
           <p className="text-xs text-[#94a3b8] uppercase tracking-widest mb-1">Revenue</p>
-          <p className="text-2xl font-bold text-[#f59e0b] font-display">{anyFtdExposed ? `$${fmt(totalRevenue)}` : "—"}</p>
+          <p className="text-2xl font-bold text-[#f59e0b] font-display">${fmt(totalRevenue)}</p>
         </div>
         <div className="glass rounded-xl p-5">
           <p className="text-xs text-[#94a3b8] uppercase tracking-widest mb-1">Payout</p>
-          <p className="text-2xl font-bold text-[#a78bfa] font-display">{anyFtdExposed ? `$${fmt(totalPayout)}` : "—"}</p>
+          <p className="text-2xl font-bold text-[#a78bfa] font-display">${fmt(totalPayout)}</p>
         </div>
       </div>
 
