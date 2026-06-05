@@ -40,12 +40,17 @@ import { relayLead } from "@/lib/integration/relay";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { isTestPatternEmail } from "@/lib/integration/email-quality";
 
-/** Maps internal relay states to the partner-safe status surface. */
-function sanitizeStatus(s: string, ftdLabel = "ftd"): string {
-  if (s === "ftd")      return ftdLabel;
+/**
+ * Maps internal relay states to the partner-safe status surface.
+ * FTD is an internal Affinitrax conversion signal — never exposed to sellers.
+ * Sellers only ever see: relayed | in_progress | rejected
+ */
+function sanitizeStatus(s: string): string {
   if (s === "rejected") return "rejected";
   if (s === "relayed")  return "relayed";
-  return "in_progress"; // received / relaying / parked / failed
+  // ftd / received / relaying / queued / parked / failed → in_progress
+  // FTD especially must never leak — it's an internal buyer conversion metric
+  return "in_progress";
 }
 
 /** Resolves an API key string to the matching DB row, or null. */
@@ -139,7 +144,7 @@ export async function GET(req: Request) {
   const { data: leads, count } = await admin
     .from("leads")
     .select(
-      "id, status, created_at, email, click_id, sub1, sub2, sub3, country, is_test, ftd_at",
+      "id, status, created_at, email, click_id, sub1, sub2, sub3, country, is_test",
       { count: "exact" }
     )
     .eq("deal_id", apiKey.deal_id)
@@ -148,14 +153,9 @@ export async function GET(req: Request) {
     .order("created_at", { ascending: false })
     .range(skip, skip + take - 1);
 
-  // Deal-specific FTD label override
-  const ftdLabel = apiKey.deal_id === "1fa74adb-46f7-4fa5-bb91-ef921d12f489"
-    ? "call_back"
-    : "ftd";
-
   const sanitized = (leads ?? []).map((l) => ({
     lead_id:    l.id,
-    status:     sanitizeStatus(l.status as string, ftdLabel),
+    status:     sanitizeStatus(l.status as string),
     created_at: l.created_at,
     email:      l.email,
     click_id:   l.click_id,
@@ -164,7 +164,7 @@ export async function GET(req: Request) {
     sub3:       l.sub3,
     country:    l.country,
     is_test:    l.is_test,
-    ftd_at:     l.ftd_at,
+    ftd_at:     null, // never expose FTD timestamp to seller
   }));
 
   return NextResponse.json({
