@@ -140,6 +140,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Date range cannot exceed 31 days" }, { status: 400 });
   }
 
+  // ── Fetch deal FTD exposure config ────────────────────────────────────────
+  const { data: dealConfig } = await admin
+    .from("deals")
+    .select("expose_ftd, ftd_label")
+    .eq("id", apiKey.deal_id)
+    .single();
+
+  // expose_ftd=false (default) → FTD hidden as in_progress
+  // expose_ftd=true + ftd_label set → use custom label
+  // expose_ftd=true + no label → use "ftd"
+  const ftdLabel = dealConfig?.expose_ftd
+    ? (dealConfig.ftd_label ?? "ftd")
+    : null;
+
   // ── Query leads scoped to this API key's deal ─────────────────────────────
   const { data: leads, count } = await admin
     .from("leads")
@@ -152,12 +166,6 @@ export async function GET(req: Request) {
     .lte("created_at", toDate.toISOString())
     .order("created_at", { ascending: false })
     .range(skip, skip + take - 1);
-
-  // deal 1fa74adb (Constantin/Cyberleads) explicitly gets "call_back" for FTD
-  // all other deals: FTD is hidden → "in_progress"
-  const ftdLabel = apiKey.deal_id === "1fa74adb-46f7-4fa5-bb91-ef921d12f489"
-    ? "call_back"
-    : null;
 
   const sanitized = (leads ?? []).map((l) => ({
     lead_id:    l.id,

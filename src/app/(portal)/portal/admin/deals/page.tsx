@@ -15,6 +15,8 @@ type Deal = {
   notes: string | null;
   admin_notes: string | null;
   intake_method: "tracking_link" | "s2s_api" | null;
+  expose_ftd: boolean;
+  ftd_label: string | null;
   created_at: string | null;
   requester_id: string;
   partner_email?: string;
@@ -38,6 +40,8 @@ function AdminDealRow({ deal, onUpdated }: { deal: Deal; onUpdated: () => void }
   const [adminNotes, setAdminNotes] = useState(deal.admin_notes ?? "");
   const [rateUsd, setRateUsd] = useState(deal.rate_usd != null ? String(deal.rate_usd) : "");
   const [intakeMethod, setIntakeMethod] = useState<"tracking_link" | "s2s_api" | "">(deal.intake_method ?? "");
+  const [exposeFtd, setExposeFtd] = useState(deal.expose_ftd ?? false);
+  const [ftdLabel, setFtdLabel] = useState(deal.ftd_label ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,6 +67,8 @@ function AdminDealRow({ deal, onUpdated }: { deal: Deal; onUpdated: () => void }
     const body: Record<string, unknown> = { admin_notes: adminNotes };
     if (rateUsd !== "") body.rate_usd = parseFloat(rateUsd);
     body.intake_method = intakeMethod === "" ? null : intakeMethod;
+    body.expose_ftd = exposeFtd;
+    body.ftd_label = ftdLabel.trim() === "" ? null : ftdLabel.trim();
     const res = await fetch(`/api/admin/deals/${deal.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -182,6 +188,35 @@ function AdminDealRow({ deal, onUpdated }: { deal: Deal; onUpdated: () => void }
                   </div>
                 </div>
               )}
+
+              {/* FTD Exposure Toggle */}
+              <div>
+                <label className="text-xs text-[#475569] uppercase tracking-widest block mb-2">FTD Visibility (Seller API)</label>
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setExposeFtd(v => !v)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${exposeFtd ? "bg-[#00d4ff]" : "bg-white/10"}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${exposeFtd ? "translate-x-6" : "translate-x-1"}`} />
+                  </button>
+                  <span className={`text-xs font-medium ${exposeFtd ? "text-[#00d4ff]" : "text-[#475569]"}`}>
+                    {exposeFtd ? "Exposed to seller" : "Hidden (in_progress)"}
+                  </span>
+                </div>
+                {exposeFtd && (
+                  <div className="mt-2">
+                    <label className="text-xs text-[#475569] block mb-1">Custom label (leave blank for &quot;ftd&quot;)</label>
+                    <input
+                      type="text"
+                      value={ftdLabel}
+                      onChange={e => setFtdLabel(e.target.value)}
+                      placeholder="e.g. call_back, converted, ftd"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-[#334155] outline-none focus:border-[#00d4ff]/40"
+                    />
+                  </div>
+                )}
+              </div>
 
               <div>
                 <label className="text-xs text-[#475569] uppercase tracking-widest block mb-1">Admin Notes (internal)</label>

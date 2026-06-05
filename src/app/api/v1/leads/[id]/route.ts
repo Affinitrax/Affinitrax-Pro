@@ -60,14 +60,21 @@ export async function GET(
     return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   }
 
-  // Sanitize status — never expose internal relay states or FTD conversions to sellers.
-  // FTD is an internal Affinitrax metric (buyer conversion tracking) — purely internal.
-  // Sellers only ever see: "rejected", "relayed", or "in_progress".
+  // Fetch deal FTD exposure config
+  const { data: dealConfig } = await admin
+    .from("deals")
+    .select("expose_ftd, ftd_label")
+    .eq("id", lead.deal_id)
+    .single();
+
+  const ftdLabel = dealConfig?.expose_ftd
+    ? (dealConfig.ftd_label ?? "ftd")
+    : null;
+
   function sanitizeStatus(s: string): string {
     if (s === "rejected") return "rejected";
     if (s === "relayed") return "relayed";
-    // ftd / received / relaying / parked / failed → all "in_progress" to seller
-    // FTD especially must never leak — it's an internal conversion signal
+    if (s === "ftd" && ftdLabel) return ftdLabel;
     return "in_progress";
   }
 
