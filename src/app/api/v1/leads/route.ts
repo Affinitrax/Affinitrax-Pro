@@ -42,14 +42,14 @@ import { isTestPatternEmail } from "@/lib/integration/email-quality";
 
 /**
  * Maps internal relay states to the partner-safe status surface.
- * FTD is an internal Affinitrax conversion signal — never exposed to sellers.
- * Sellers only ever see: relayed | in_progress | rejected
+ * FTD is internal by default — only exposed to sellers when ftdLabel is set.
+ * Sellers only ever see: relayed | in_progress | rejected (+ optional ftdLabel)
  */
-function sanitizeStatus(s: string): string {
+function sanitizeStatus(s: string, ftdLabel: string | null = null): string {
   if (s === "rejected") return "rejected";
   if (s === "relayed")  return "relayed";
-  // ftd / received / relaying / queued / parked / failed → in_progress
-  // FTD especially must never leak — it's an internal buyer conversion metric
+  if (s === "ftd" && ftdLabel) return ftdLabel;
+  // ftd (no label) / received / relaying / queued / parked / failed → in_progress
   return "in_progress";
 }
 
@@ -153,9 +153,15 @@ export async function GET(req: Request) {
     .order("created_at", { ascending: false })
     .range(skip, skip + take - 1);
 
+  // deal 1fa74adb (Constantin/Cyberleads) explicitly gets "call_back" for FTD
+  // all other deals: FTD is hidden → "in_progress"
+  const ftdLabel = apiKey.deal_id === "1fa74adb-46f7-4fa5-bb91-ef921d12f489"
+    ? "call_back"
+    : null;
+
   const sanitized = (leads ?? []).map((l) => ({
     lead_id:    l.id,
-    status:     sanitizeStatus(l.status as string),
+    status:     sanitizeStatus(l.status as string, ftdLabel),
     created_at: l.created_at,
     email:      l.email,
     click_id:   l.click_id,
