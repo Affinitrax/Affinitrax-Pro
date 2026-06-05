@@ -78,7 +78,8 @@ export async function GET(request: NextRequest) {
   while (true) {
     let data: BelmarResponse;
     try {
-      const resp = await proxyFetch("https://crm.belmar.pro/api/v1/getstatuses", {
+      // Belmar's read endpoint does not require proxy — use direct fetch
+      const resp = await fetch("https://crm.belmar.pro/api/v1/getstatuses", {
         method: "POST",
         headers: { "token": token, "Content-Type": "application/json" },
         body: JSON.stringify({ date_from: fmt(from), date_to: fmt(now), page, limit }),
