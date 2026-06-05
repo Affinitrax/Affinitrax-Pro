@@ -66,9 +66,9 @@ export async function GET(request: NextRequest) {
   }
   if (!token) return NextResponse.json({ error: "Failed to decrypt Belmar token" }, { status: 500 });
 
-  // Poll last 48 hours
+  // Poll last 7 days — Belmar filters by lead creation date not FTD date
   const now = new Date();
-  const from = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+  const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const fmt = (d: Date) => d.toISOString().replace("T", " ").slice(0, 19);
 
   let allLeads: BelmarLead[] = [];
