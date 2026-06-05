@@ -86,7 +86,9 @@ export async function GET(request: NextRequest) {
         signal: AbortSignal.timeout(30_000),
       });
       if (!resp.ok) return NextResponse.json({ error: `Belmar API returned HTTP ${resp.status}` }, { status: 502 });
-      data = await resp.json() as BelmarResponse;
+      const rawText = await resp.text();
+      try { data = JSON.parse(rawText) as BelmarResponse; } catch { return NextResponse.json({ error: "JSON parse failed", raw: rawText.slice(0, 500) }, { status: 502 }); }
+      if (!data.status) return NextResponse.json({ error: "Belmar returned status:false", raw: rawText.slice(0, 500) }, { status: 502 });
     } catch (err) {
       return NextResponse.json({ error: String(err) }, { status: 502 });
     }
