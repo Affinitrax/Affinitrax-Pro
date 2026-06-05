@@ -23,6 +23,10 @@
     {
       "path": "/api/cron/ocean-ftd-sync",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/titans-ftd-sync",
+      "schedule": "0 * * * *"
     }
   ]
 }
