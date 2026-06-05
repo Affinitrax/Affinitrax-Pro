@@ -36,10 +36,10 @@ export default async function ReportsPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/portal/login");
 
-  // Get user's deals
+  // Get user's deals — expose_ftd controls whether FTD metrics are visible to this seller
   const { data: deals } = await supabase
     .from("deals")
-    .select("id, vertical, geos, model, status")
+    .select("id, vertical, geos, model, status, expose_ftd")
     .eq("requester_id", user.id);
 
   const dealIds = (deals || []).map((d: { id: string }) => d.id);
@@ -65,7 +65,7 @@ export default async function ReportsPage() {
     .in("deal_id", dealIds.length > 0 ? dealIds : ["00000000-0000-0000-0000-000000000000"])
     .order("received_at", { ascending: false });
 
-  type DealRow = { id: string; vertical: string | null; geos: string[] | null; model: string | null; status: string | null };
+  type DealRow = { id: string; vertical: string | null; geos: string[] | null; model: string | null; status: string | null; expose_ftd: boolean };
   type EventRow = { deal_id: string; event_type: string | null; revenue: number | null; payout: number | null; geo: string | null; received_at: string | null };
 
   const typedDeals: DealRow[] = (deals as DealRow[]) || [];
@@ -76,10 +76,12 @@ export default async function ReportsPage() {
     const dealEvents = typedEvents.filter((e) => e.deal_id === deal.id);
     const clicks = dealEvents.filter((e) => e.event_type === "click").length;
     const leads = leadCountMap[deal.id] ?? 0;
-    const ftds = dealEvents.filter((e) => e.event_type === "ftd" || e.event_type === "conversion" || e.event_type === "deposit").length;
+    // Only expose FTD count if the deal has expose_ftd=true — gate at display layer
+    const rawFtds = dealEvents.filter((e) => e.event_type === "ftd" || e.event_type === "conversion" || e.event_type === "deposit").length;
+    const ftds = deal.expose_ftd ? rawFtds : null; // null = hidden from seller
     const totalRevenue = dealEvents.reduce((sum, e) => sum + (e.revenue || 0), 0);
     const totalPayout = dealEvents.reduce((sum, e) => sum + (e.payout || 0), 0);
-    const convRate = clicks > 0 ? ((ftds / clicks) * 100).toFixed(1) : "0.0";
+    const convRate = clicks > 0 && deal.expose_ftd ? ((rawFtds / clicks) * 100).toFixed(1) : "—";
 
     // GEO breakdown
     const geoMap: Record<string, number> = {};
@@ -90,7 +92,7 @@ export default async function ReportsPage() {
       ...deal,
       clicks,
       leads,
-      ftds,
+      ftds,          // null when hidden, number when exposed
       totalRevenue,
       totalPayout,
       margin: totalRevenue - totalPayout,
@@ -101,10 +103,12 @@ export default async function ReportsPage() {
   });
 
   // Summary totals — revenue intentionally excluded (blind brokerage: partners see payout only)
+  // FTD totals only counted for deals where expose_ftd=true
   const totalClicks = stats.reduce((s, d) => s + d.clicks, 0);
-  const totalFtds = stats.reduce((s, d) => s + d.ftds, 0);
+  const totalFtds = stats.reduce((s, d) => s + (d.ftds ?? 0), 0);
   const totalLeads = stats.reduce((s, d) => s + d.leads, 0);
-  const avgConvRate = totalClicks > 0 ? ((totalFtds / totalClicks) * 100).toFixed(1) : "0.0";
+  const anyFtdExposed = stats.some(d => d.expose_ftd);
+  const avgConvRate = totalClicks > 0 && anyFtdExposed ? ((totalFtds / totalClicks) * 100).toFixed(1) : "—";
 
   return (
       <main className="flex-1 p-8">
@@ -118,8 +122,8 @@ export default async function ReportsPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <SummaryCard label="Total Clicks" value={totalClicks.toLocaleString()} />
           <SummaryCard label="Total Leads" value={totalLeads.toLocaleString()} />
-          <SummaryCard label="Total FTDs" value={totalFtds.toLocaleString()} />
-          <SummaryCard label="Avg Conv Rate" value={`${avgConvRate}%`} />
+          {anyFtdExposed && <SummaryCard label="Total FTDs" value={totalFtds.toLocaleString()} />}
+          <SummaryCard label="Avg Conv Rate" value={anyFtdExposed ? `${avgConvRate}%` : "—"} />
         </div>
 
         {/* Per-deal report cards */}
@@ -153,10 +157,12 @@ export default async function ReportsPage() {
 
                 {/* Stats row — revenue/margin excluded (blind brokerage) */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
-                  <div className="text-center">
-                    <p className="text-xs text-white font-semibold uppercase tracking-widest mb-1">FTDs</p>
-                    <p className="text-sm font-semibold text-green-400">{deal.ftds.toLocaleString()}</p>
-                  </div>
+                  {deal.ftds !== null && (
+                    <div className="text-center">
+                      <p className="text-xs text-white font-semibold uppercase tracking-widest mb-1">FTDs</p>
+                      <p className="text-sm font-semibold text-green-400">{deal.ftds.toLocaleString()}</p>
+                    </div>
+                  )}
                   <div className="text-center">
                     <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Leads</p>
                     <p className="text-sm font-semibold text-white">{deal.leads.toLocaleString()}</p>
@@ -167,7 +173,7 @@ export default async function ReportsPage() {
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Conv %</p>
-                    <p className="text-sm font-semibold text-[#00d4ff]">{deal.convRate}%</p>
+                    <p className="text-sm font-semibold text-[#00d4ff]">{deal.convRate === "—" ? "—" : `${deal.convRate}%`}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-[#475569] uppercase tracking-widest mb-1">Payout</p>

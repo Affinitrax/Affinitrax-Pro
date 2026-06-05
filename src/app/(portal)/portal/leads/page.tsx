@@ -22,13 +22,18 @@ type Deal = {
   id: string;
   vertical: string | null;
   geos: string[] | null;
+  expose_ftd: boolean;
+  ftd_label: string | null;
 };
 
 // ── Sanitization helpers ─────────────────────────────────────────────────────
 
-/** Map internal status to partner-safe display label. */
-function sanitizeStatus(status: string): "Processing" | "Converted" | "Reviewing" {
-  if (status === "ftd") return "Converted";
+/** Map internal status to partner-safe display label, respecting deal-level FTD visibility. */
+function sanitizeStatus(status: string, exposeFtd: boolean, ftdLabel: string | null): "Processing" | "Converted" | "Reviewing" | string {
+  if (status === "ftd") {
+    if (!exposeFtd) return "Processing"; // FTD hidden
+    return ftdLabel ?? "Converted";      // FTD exposed with custom label or default
+  }
   if (status === "rejected") return "Reviewing";
   return "Processing";
 }
@@ -79,7 +84,7 @@ export default async function PartnerLeadsPage() {
       .limit(100),
     supabase
       .from("deals")
-      .select("id, vertical, geos")
+      .select("id, vertical, geos, expose_ftd, ftd_label")
       .eq("requester_id", user.id),
   ]);
 
@@ -92,7 +97,10 @@ export default async function PartnerLeadsPage() {
   // Summary counts — test leads excluded from stats
   const liveLeads = leads.filter((l) => !l.is_test);
   const totalCount = liveLeads.length;
-  const convertedCount = liveLeads.filter((l) => l.status === "ftd").length;
+  const convertedCount = liveLeads.filter((l) => {
+    const deal = dealMap[l.deal_id];
+    return l.status === "ftd" && deal?.expose_ftd;
+  }).length;
   const processingCount = liveLeads.filter((l) =>
     ["received", "relaying", "relayed", "parked", "failed"].includes(l.status)
   ).length;
@@ -160,8 +168,12 @@ export default async function PartnerLeadsPage() {
                 </thead>
                 <tbody>
                   {leads.map((lead, i) => {
-                    const sanitized = sanitizeStatus(lead.status);
                     const deal = dealMap[lead.deal_id];
+                    const sanitized = sanitizeStatus(
+                      lead.status,
+                      deal?.expose_ftd ?? false,
+                      deal?.ftd_label ?? null
+                    );
                     return (
                       <tr
                         key={lead.id}
@@ -189,7 +201,7 @@ export default async function PartnerLeadsPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${lead.is_test ? "opacity-50" : ""} ${BADGE_STYLES[sanitized]}`}>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${lead.is_test ? "opacity-50" : ""} ${BADGE_STYLES[sanitized as keyof typeof BADGE_STYLES] ?? BADGE_STYLES["Converted"]}`}>
                             {sanitized}
                           </span>
                         </td>

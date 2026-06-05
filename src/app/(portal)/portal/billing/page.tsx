@@ -39,7 +39,7 @@ export default async function BillingPage() {
 
   const { data: deals } = await supabase
     .from("deals")
-    .select("*")
+    .select("id, vertical, geos, model, status, budget_usd, created_at, expose_ftd")
     .eq("requester_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -58,6 +58,7 @@ export default async function BillingPage() {
     status: string | null;
     budget_usd: number | null;
     created_at: string | null;
+    expose_ftd: boolean;
   };
   type EventRow = { deal_id: string; event_type: string | null; revenue: number | null; payout: number | null };
 
@@ -72,7 +73,8 @@ export default async function BillingPage() {
     const totalRevenue = ftdEvents.reduce((sum, e) => sum + (Number(e.revenue) || 0), 0);
     const totalPayout = ftdEvents.reduce((sum, e) => sum + (Number(e.payout) || 0), 0);
     const margin = totalRevenue - totalPayout;
-    const ftdCount = ftdEvents.length;
+    // Only expose FTD count (and derived financials) if admin toggled expose_ftd=true for this deal
+    const ftdCount = deal.expose_ftd ? ftdEvents.length : null;
 
     return { ...deal, totalRevenue, totalPayout, margin, ftdCount };
   });
@@ -152,7 +154,7 @@ export default async function BillingPage() {
                       <td className="px-6 py-4 text-[#94a3b8]">
                         {deal.budget_usd != null ? `$${deal.budget_usd.toLocaleString()}` : "—"}
                       </td>
-                      <td className="px-6 py-4 text-white">{deal.ftdCount}</td>
+                      <td className="px-6 py-4 text-white">{deal.ftdCount !== null ? deal.ftdCount : "—"}</td>
                       <td className="px-6 py-4 text-[#f59e0b] font-medium">${fmt(deal.totalRevenue)}</td>
                       <td className="px-6 py-4 text-[#a78bfa]">${fmt(deal.totalPayout)}</td>
                       <td className={`px-6 py-4 font-medium ${deal.margin > 0 ? "text-green-400" : deal.margin < 0 ? "text-red-400" : "text-[#94a3b8]"}`}>
