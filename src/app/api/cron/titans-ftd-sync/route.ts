@@ -29,7 +29,7 @@ function proxyFetch(url: string, init: RequestInit): Promise<Response> {
 }
 
 type IREVLead = {
-  lead_uuid: string;   // buyer_lead_id stored when we first relayed
+  id: string;           // buyer_lead_id stored when we first relayed
   isDeposited: boolean;
   depositedAt: string | null;
   subId: string | null; // our internal lead UUID (sent as aff_sub5)
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
   const from = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
   const to = now.toISOString();
 
-  const url = new URL("https://yourleads.org/api/affiliates/v2/leads");
+  const url = new URL("https://yourleads.org/api/external/integration/lead");
   url.searchParams.set("skip", "0");
   url.searchParams.set("take", "500");
   url.searchParams.set("from", from);
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
     const { data: byBuyerLeadId } = await admin
       .from("leads")
       .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id")
-      .eq("buyer_lead_id", row.lead_uuid)
+      .eq("buyer_lead_id", row.id)
       .maybeSingle();
 
     lead = byBuyerLeadId;
