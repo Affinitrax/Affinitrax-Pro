@@ -87,10 +87,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to decrypt BetLeads API key" }, { status: 500 });
   }
 
-  // Poll last 14 days — wide window to catch status changes on older leads
+  // Poll last 60 days — covers historical leads and ongoing status changes
   const now = new Date();
-  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-  const fromDate = fourteenDaysAgo.toISOString().replace("T", " ").slice(0, 19);
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const fromDate = sixtyDaysAgo.toISOString().replace("T", " ").slice(0, 19);
   const toDate = now.toISOString().replace("T", " ").slice(0, 19);
 
   const url = new URL("https://safe-api.co/api/v2/leads");
