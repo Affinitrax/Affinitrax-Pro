@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/phoenix-ftd-sync",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/phoenix-status-sync",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
