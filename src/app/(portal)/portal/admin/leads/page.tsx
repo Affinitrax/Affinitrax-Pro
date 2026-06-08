@@ -20,6 +20,7 @@ type Lead = {
   click_id: string | null;
   status: string;
   buyer_lead_id: string | null;
+  buyer_crm_status: string | null;
   relay_attempts: number;
   relay_error: string | null;
   is_test: boolean;
@@ -158,6 +159,7 @@ export default function AdminLeadsPage() {
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Name</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Country</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Status</th>
+                    <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">CRM Status</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Buyer ID</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Deal</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Received</th>
@@ -198,6 +200,23 @@ export default function AdminLeadsPage() {
                             <span className="text-[10px] text-[#334155]">×{lead.relay_attempts}</span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {lead.buyer_crm_status ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
+                            lead.buyer_crm_status.toLowerCase() === "callagain"
+                              ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                              : lead.buyer_crm_status.toLowerCase().startsWith("noanswer")
+                              ? "bg-[#1e293b] text-[#475569] border-white/10"
+                              : lead.buyer_crm_status.toLowerCase() === "notinterested"
+                              ? "bg-red-500/10 text-red-400 border-red-500/20"
+                              : "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                          }`}>
+                            {lead.buyer_crm_status}
+                          </span>
+                        ) : (
+                          <span className="text-[#334155] text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-[#475569] font-mono text-xs">{lead.buyer_lead_id ?? "—"}</span>
