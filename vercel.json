@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/betleads-status-sync",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/phoenix-ftd-sync",
+      "schedule": "0 * * * *"
     }
   ]
 }
