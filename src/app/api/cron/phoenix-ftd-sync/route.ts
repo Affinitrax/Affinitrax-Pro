@@ -62,27 +62,14 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  // Poll last 14 days
-  const now = new Date();
-  const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const formatDate = (d: Date) =>
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-
-  const startDate = formatDate(fourteenDaysAgo);
-  const endDate = formatDate(now);
-
   let allLeads: PhoenixLead[] = [];
   let page = 1;
   let totalPages = 1;
 
-  // Paginate through all results
+  // Paginate through all results — no date filter (Phoenix returns empty with date params)
   do {
     const url = new URL(`${PHOENIX_BASE_URL}/auth/affiliates/leads-status`);
     url.searchParams.set("token", PHOENIX_API_TOKEN);
-    url.searchParams.set("start_date", startDate);
-    url.searchParams.set("end_date", endDate);
     url.searchParams.set("per-page", "100");
     url.searchParams.set("page", String(page));
 
