@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/profitspace-status-sync",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/betleads-status-sync",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
