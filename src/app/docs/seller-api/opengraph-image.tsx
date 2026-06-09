@@ -149,7 +149,6 @@ export default function OGImage() {
               border: "1px solid rgba(0,212,255,0.2)",
               borderRadius: 8,
               padding: "7px 14px",
-              width: "fit-content",
             }}
           >
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#00d4ff", display: "flex" }} />
