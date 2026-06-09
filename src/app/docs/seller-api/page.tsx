@@ -4,8 +4,20 @@ import CopyButton from "@/components/portal/CopyButton";
 
 export const metadata: Metadata = {
   title: "Seller API Reference — Affinitrax",
-  description: "Complete API documentation for sellers integrating leads with Affinitrax.",
+  description: "S2S lead submission API. REST/JSON, X-API-Key auth, postback tracking. Full reference for integrating leads with Affinitrax.",
   robots: { index: false, follow: false },
+  openGraph: {
+    title: "Seller API Reference — Affinitrax",
+    description: "S2S lead submission API. REST/JSON, X-API-Key auth, postback tracking.",
+    url: "https://affinitrax.com/docs/seller-api",
+    siteName: "Affinitrax",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Seller API Reference — Affinitrax",
+    description: "S2S lead submission API. REST/JSON, X-API-Key auth, postback tracking.",
+  },
 };
 
 const BASE = "https://affinitrax.com";
