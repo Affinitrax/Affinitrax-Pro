@@ -55,6 +55,14 @@
     {
       "path": "/api/cron/ftdhunters-status-sync",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/titans-latam-start",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/titans-latam-stop",
+      "schedule": "0 1 * * *"
     }
   ]
 }
