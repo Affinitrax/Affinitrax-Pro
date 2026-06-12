@@ -83,6 +83,14 @@
     {
       "path": "/api/cron/ocean-latam-start",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/ftdhunters-co-start",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/ftdhunters-co-stop",
+      "schedule": "0 23 * * *"
     }
   ]
 }
