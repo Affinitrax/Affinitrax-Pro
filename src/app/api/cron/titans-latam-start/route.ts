@@ -28,14 +28,15 @@ export async function GET(request: NextRequest) {
     .eq("id", TITANS_LATAM_ID);
 
   // Re-queue all parked leads assigned to this integration
-  const { count } = await admin
+  const { data: requeued } = await admin
     .from("leads")
     .update({ status: "queued", relay_attempts: 0, relay_error: null })
     .eq("integration_id", TITANS_LATAM_ID)
     .eq("status", "parked")
-    .select("id", { count: "exact", head: true });
+    .select("id");
 
-  console.log(`[titans-latam-start] activated — re-queued ${count ?? 0} leads`);
+  const requeuedCount = requeued?.length ?? 0;
+  console.log(`[titans-latam-start] activated — re-queued ${requeuedCount} leads`);
 
-  return NextResponse.json({ activated: true, requeued: count ?? 0 });
+  return NextResponse.json({ activated: true, requeued: requeuedCount });
 }

@@ -22,12 +22,14 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient();
 
   // Park all queued leads
-  const { count } = await admin
+  const { data: parkedLeads } = await admin
     .from("leads")
     .update({ status: "parked", relay_error: null })
     .eq("integration_id", TITANS_LATAM_ID)
     .eq("status", "queued")
-    .select("id", { count: "exact", head: true });
+    .select("id");
+
+  const parkedCount = parkedLeads?.length ?? 0;
 
   // Deactivate integration
   await admin
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
     .update({ status: "testing" })
     .eq("id", TITANS_LATAM_ID);
 
-  console.log(`[titans-latam-stop] deactivated — parked ${count ?? 0} queued leads`);
+  console.log(`[titans-latam-stop] deactivated — parked ${parkedCount} queued leads`);
 
-  return NextResponse.json({ deactivated: true, parked: count ?? 0 });
+  return NextResponse.json({ deactivated: true, parked: parkedCount });
 }
