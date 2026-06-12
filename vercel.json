@@ -79,6 +79,10 @@
     {
       "path": "/api/cron/titans-fr-stop",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/ocean-latam-start",
+      "schedule": "0 13 * * *"
     }
   ]
 }
