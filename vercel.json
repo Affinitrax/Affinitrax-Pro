@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/phoenix-status-sync",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/ftdhunters-ftd-sync",
+      "schedule": "0 * * * *"
     }
   ]
 }
