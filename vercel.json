@@ -63,6 +63,22 @@
     {
       "path": "/api/cron/titans-latam-stop",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/titans-it-start",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/titans-it-stop",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/titans-fr-start",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/titans-fr-stop",
+      "schedule": "0 18 * * *"
     }
   ]
 }
