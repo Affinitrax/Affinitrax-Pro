@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/ftdhunters-ftd-sync",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/ftdhunters-status-sync",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
