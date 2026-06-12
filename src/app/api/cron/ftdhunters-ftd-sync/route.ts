@@ -38,6 +38,7 @@ function proxyFetch(url: string, init: RequestInit): Promise<Response> {
 
 type IrevLead = {
   uuid: string;
+  leadUuid: string | null; // matches buyer_lead_id (from POST response lead_uuid)
   externalId: string | null;
   goalType?: string;
   email?: string;
@@ -118,8 +119,9 @@ export async function GET(request: NextRequest) {
   let notFound = 0;
 
   for (const lead of allLeads) {
-    // Match by uuid (IREV's lead UUID = what we store as buyer_lead_id from POST response)
-    if (!lead.uuid) {
+    // Match by leadUuid (IREV's lead UUID = what we store as buyer_lead_id from POST response)
+    const matchId = lead.leadUuid ?? lead.uuid;
+    if (!matchId) {
       notFound++;
       continue;
     }
@@ -127,7 +129,7 @@ export async function GET(request: NextRequest) {
     const { data: dbLead } = await admin
       .from("leads")
       .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id")
-      .eq("buyer_lead_id", lead.uuid)
+      .eq("buyer_lead_id", matchId)
       .maybeSingle();
 
     if (!dbLead) {
