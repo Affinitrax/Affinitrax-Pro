@@ -417,7 +417,7 @@ export async function relayLead(
       status: success ? "relayed" : "failed",
       buyer_lead_id: buyerLeadId,
       redirect_url: redirectUrl,
-      relay_error: relayError,
+      relay_error: relayError ?? null,
       relayed_at: success ? new Date().toISOString() : null,
       integration_id: integration.id,
     })
