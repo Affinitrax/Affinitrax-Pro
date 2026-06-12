@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("created_to", createdTo);
     url.searchParams.set("page", String(page));
     url.searchParams.set("per_page", String(perPage));
-    url.searchParams.set("is_test", "false");
+    // Note: do not filter is_test so test FTDs are also caught during integration verification
 
     try {
       const resp = await proxyFetch(url.toString(), {
@@ -118,7 +118,8 @@ export async function GET(request: NextRequest) {
   let notFound = 0;
 
   for (const lead of allLeads) {
-    if (!lead.externalId) {
+    // Match by uuid (IREV's lead UUID = what we store as buyer_lead_id from POST response)
+    if (!lead.uuid) {
       notFound++;
       continue;
     }
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
     const { data: dbLead } = await admin
       .from("leads")
       .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id")
-      .eq("buyer_lead_id", lead.externalId)
+      .eq("buyer_lead_id", lead.uuid)
       .maybeSingle();
 
     if (!dbLead) {
