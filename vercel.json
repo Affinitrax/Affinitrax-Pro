@@ -91,6 +91,10 @@
     {
       "path": "/api/cron/ftdhunters-co-stop",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/lead-events-cleanup",
+      "schedule": "0 3 * * 0"
     }
   ]
 }

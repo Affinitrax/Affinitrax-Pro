@@ -327,10 +327,8 @@ export async function relayLead(
     payload: mapped,
   });
 
-  // Increment relay_attempts — safe read-modify-write since each lead is relayed
-  // by exactly one request at a time (status guard "relaying" prevents re-entry).
-  const { data: cur } = await admin.from("leads").select("relay_attempts").eq("id", leadId).single();
-  await admin.from("leads").update({ relay_attempts: (cur?.relay_attempts ?? 0) + 1 }).eq("id", leadId);
+  // Increment relay_attempts atomically in a single RPC call (avoids a SELECT + UPDATE round-trip).
+  await admin.rpc("increment_relay_attempts", { lead_id: leadId });
 
   let responseStatus: number | null = null;
   let responseText = "";
