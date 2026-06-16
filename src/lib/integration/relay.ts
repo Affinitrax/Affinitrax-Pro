@@ -158,7 +158,7 @@ function logFailureEvent(
   }
 ) {
   const admin = createAdminClient();
-  admin.from("lead_events").insert({
+  void Promise.resolve(admin.from("lead_events").insert({
     lead_id: leadId,
     direction: "outbound",
     event_type: eventType,
@@ -166,7 +166,7 @@ function logFailureEvent(
     payload: opts.payload,
     response_status: opts.responseStatus,
     response_body: opts.responseBody,
-  }).then(() => {}).catch(() => {}); // intentionally fire-and-forget
+  })).catch(() => {}); // intentionally fire-and-forget
 }
 
 // ── Main relay function ───────────────────────────────────────────────────────
