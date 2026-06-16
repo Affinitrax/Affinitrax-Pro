@@ -361,7 +361,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to create lead" }, { status: 500 });
   }
 
-  await admin.from("lead_events").insert({
+  // Fire-and-forget — never block the API response on an audit log write
+  admin.from("lead_events").insert({
     lead_id:    lead.id,
     direction:  "inbound",
     event_type: "lead_received",
@@ -374,7 +375,7 @@ export async function POST(req: Request) {
       click_id,
       quality_flags: qualityFlags.length > 0 ? qualityFlags : undefined,
     },
-  });
+  }).then(() => {}).catch(() => {});
 
   if (qualityFlags.length > 0) {
     await sendTelegramMessage(
