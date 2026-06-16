@@ -99,9 +99,10 @@ export async function GET(request: NextRequest) {
     // which would silently drop every lead whose quality_flags is NULL.
     const { data: rawQueuedLeads } = await admin
       .from("leads")
-      .select("id, deal_id, email, first_name, last_name, phone, country, ip, click_id, sub1, sub2, sub3, quality_flags")
+      .select("id, deal_id, email, first_name, last_name, phone, country, ip, click_id, sub1, sub2, sub3, quality_flags, is_test")
       .eq("integration_id", integration.id)
       .eq("status", "queued")
+      .eq("is_test", false)  // never relay test leads automatically
       .order("created_at", { ascending: true })
       .limit(toProcess + 20);
 
