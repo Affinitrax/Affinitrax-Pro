@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const { error, count } = await admin
     .from("lead_events")
