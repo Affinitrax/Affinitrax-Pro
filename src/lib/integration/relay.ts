@@ -382,6 +382,11 @@ export async function relayLead(
 
   const success = !relayError && responseStatus !== null && responseStatus < 300;
 
+  // TEMP DIAGNOSTIC: log response for Lions integration
+  if (integration.name?.includes("Lions")) {
+    console.log(`[lions-debug] status=${responseStatus} body=${responseText.slice(0, 500)}`);
+  }
+
   // On failure only: log what we sent and what we got back (fire-and-forget, never blocks).
   if (!success) {
     logFailureEvent(leadId, "relay_attempt", {
