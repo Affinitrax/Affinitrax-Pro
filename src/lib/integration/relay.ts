@@ -7,7 +7,13 @@
  *   5. Parse response for buyer lead ID and redirect URL
  *   6. Persist outcome on the lead record
  *   7. Fire seller postback (if configured for "lead" event)
- *   8. Write audit events to lead_events
+ *   8. Write audit events to lead_events (failures only, fire-and-forget)
+ *
+ * IO optimisations:
+ *   - lead_events only written on failure — success relays produce zero event rows
+ *   - logEvent is fire-and-forget (never blocks the relay hot path)
+ *   - "relaying" intermediate status removed — one fewer write per relay
+ *   - lead_queued / lead_parked events removed — status on leads table is the source of truth
  */
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -137,9 +143,12 @@ function buildUrl(
   return url.toString();
 }
 
-async function logEvent(
+/**
+ * Fire-and-forget event logger — only called on relay failures.
+ * Never awaited so it never blocks the relay hot path.
+ */
+function logFailureEvent(
   leadId: string,
-  direction: "inbound" | "outbound",
   eventType: string,
   opts: {
     endpoint?: string;
@@ -149,15 +158,15 @@ async function logEvent(
   }
 ) {
   const admin = createAdminClient();
-  await admin.from("lead_events").insert({
+  admin.from("lead_events").insert({
     lead_id: leadId,
-    direction,
+    direction: "outbound",
     event_type: eventType,
     endpoint: opts.endpoint,
     payload: opts.payload,
     response_status: opts.responseStatus,
     response_body: opts.responseBody,
-  });
+  }).then(() => {}).catch(() => {}); // intentionally fire-and-forget
 }
 
 // ── Main relay function ───────────────────────────────────────────────────────
@@ -170,12 +179,6 @@ export async function relayLead(
   preassignedIntegrationId?: string
 ): Promise<RelayResult> {
   const admin = createAdminClient();
-
-  // Mark as relaying
-  await admin
-    .from("leads")
-    .update({ status: "relaying" })
-    .eq("id", leadId);
 
   let integration: DealIntegration | null = null;
 
@@ -206,9 +209,6 @@ export async function relayLead(
         .from("leads")
         .update({ status: "parked", relay_error: null })
         .eq("id", leadId);
-      await logEvent(leadId, "inbound", "lead_parked", {
-        payload: { reason: `No active buyer integration for geo: ${payload.country ?? "unknown"}` },
-      });
       return { success: false, relay_error: "parked" };
     }
 
@@ -236,20 +236,12 @@ export async function relayLead(
     if (!integration) {
       const leadCountry = (payload.country ?? "").toUpperCase();
       await admin.from("leads").update({ status: "parked", relay_error: null }).eq("id", leadId);
-      await logEvent(leadId, "inbound", "lead_parked", {
-        payload: { reason: `No active buyer integration for geo: ${leadCountry || "unknown"} (all caps hit or no match)` },
-      });
+      console.log(`[relay] no integration for geo=${leadCountry || "unknown"} deal=${dealId}`);
       return { success: false, relay_error: "parked" };
     }
 
-    // 2. Queue lead and let cron worker relay it — both instant and throttled
-    //    modes use this path. Instant = cron fires within ~60s with no rate
-    //    limiting. Throttled = cron fires at configured leads/hour.
-    //    Firing inline (instant) caused Vercel timeout failures because
-    //    Profitspace takes 5-11s and Vercel's function limit is 10s.
-    //
-    //    Clear stale relay data from any previous integration attempt so the
-    //    portal never shows a ghost buyer_lead_id from a different buyer.
+    // Queue lead — cron will relay it on next tick.
+    // Clear stale relay data from any previous integration attempt.
     await admin
       .from("leads")
       .update({
@@ -260,9 +252,6 @@ export async function relayLead(
         relayed_at: null,
       })
       .eq("id", leadId);
-    await logEvent(leadId, "inbound", "lead_queued", {
-      payload: { integration_id: integration.id, relay_mode: integration.relay_mode, throttle_rate: integration.throttle_rate },
-    });
     return { success: true, relay_error: undefined };
   } // end normal path
 
@@ -314,18 +303,12 @@ export async function relayLead(
     // If any buyer_field uses dot-notation (e.g. "profile.firstName"),
     // build a nested object before serialising.
     const hasNested = Object.keys(mapped).some((k) => k.includes("."));
-    const payload = hasNested ? buildNestedPayload(mapped) : mapped;
-    bodyStr = JSON.stringify(payload);
+    const bodyPayload = hasNested ? buildNestedPayload(mapped) : mapped;
+    bodyStr = JSON.stringify(bodyPayload);
   } else {
     headers["Content-Type"] = "application/x-www-form-urlencoded";
     bodyStr = new URLSearchParams(mapped).toString();
   }
-
-  // Log outbound event (before firing)
-  await logEvent(leadId, "outbound", "relay_attempt", {
-    endpoint: integration.endpoint_url,
-    payload: mapped,
-  });
 
   // Increment relay_attempts atomically in a single RPC call (avoids a SELECT + UPDATE round-trip).
   await admin.rpc("increment_relay_attempts", { lead_id: leadId });
@@ -390,8 +373,6 @@ export async function relayLead(
           }
         }
       }
-      // If parsed is null (non-JSON) and buyerLeadId is still undefined, leave it undefined
-      // rather than storing a raw error body as the lead ID
     } else {
       relayError = `Buyer CRM returned HTTP ${responseStatus}`;
     }
@@ -399,14 +380,20 @@ export async function relayLead(
     relayError = err instanceof Error ? err.message : String(err);
   }
 
-  // Log response event
-  await logEvent(leadId, "outbound", "relay_response", {
-    endpoint: integration.endpoint_url,
-    responseStatus: responseStatus ?? undefined,
-    responseBody: responseText,
-  });
-
   const success = !relayError && responseStatus !== null && responseStatus < 300;
+
+  // On failure only: log what we sent and what we got back (fire-and-forget, never blocks).
+  if (!success) {
+    logFailureEvent(leadId, "relay_attempt", {
+      endpoint: integration.endpoint_url,
+      payload: mapped,
+    });
+    logFailureEvent(leadId, "relay_response", {
+      endpoint: integration.endpoint_url,
+      responseStatus: responseStatus ?? undefined,
+      responseBody: responseText,
+    });
+  }
 
   // Update lead record (integration_id stamped on both success and fail to count against the cap)
   await admin

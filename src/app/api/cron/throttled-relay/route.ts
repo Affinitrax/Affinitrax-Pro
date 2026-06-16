@@ -2,10 +2,13 @@
  * GET /api/cron/throttled-relay
  *
  * Runs every minute (Vercel Cron).
- * For each throttled integration with queued leads:
- *   - Counts how many leads were relayed in the last hour
- *   - If under throttle_rate: picks next queued lead and relays it
- *   - Randomises a small jitter so bursts don't look mechanical
+ * For each active integration with queued leads:
+ *   - Throttled: checks hourly rate cap and minimum interval, relays 1 lead
+ *   - Instant: relays all queued leads this tick
+ *
+ * IO optimisations:
+ *   - Fix 3: auto-pause reuses integration.daily_cap (no extra DB re-fetch)
+ *   - Fix 4: throttle check merges COUNT + MAX(relayed_at) into a single query
  *
  * Protected by CRON_SECRET env var (set in Vercel).
  */
@@ -18,7 +21,6 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  // Verify cron secret — accepts either Vercel CRON_SECRET or Supabase SUPABASE_CRON_SECRET
   const authHeader = request.headers.get("authorization");
   const validTokens = [
     process.env.CRON_SECRET,
@@ -30,8 +32,10 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
   const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
 
-  // Find all active integrations (both instant + throttled) that have queued leads
+  // Find all active integrations (both instant + throttled)
   const { data: integrations } = await admin
     .from("deal_integrations")
     .select("id, deal_id, throttle_rate, daily_cap, relay_mode")
@@ -47,51 +51,41 @@ export async function GET(request: NextRequest) {
   for (const integration of integrations) {
     const isInstant = integration.relay_mode === "instant";
 
-    // Enforce daily cap if set (applies to both instant and throttled)
+    // Fix 3: reuse integration.daily_cap directly — no extra DB fetch
     if (integration.daily_cap !== null) {
-      const todayStart = new Date();
-      todayStart.setUTCHours(0, 0, 0, 0);
       const { count: todayCount } = await admin
         .from("leads")
         .select("id", { count: "exact", head: true })
         .eq("integration_id", integration.id)
         .in("status", ["relayed", "ftd"])
         .gte("relayed_at", todayStart.toISOString());
-      if ((todayCount ?? 0) >= integration.daily_cap) continue; // daily cap hit
+      if ((todayCount ?? 0) >= integration.daily_cap) continue;
     }
 
     if (!isInstant) {
-      // Throttled: enforce hourly rate cap
-      const { count: recentCount } = await admin
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("integration_id", integration.id)
-        .eq("status", "relayed")
-        .gte("relayed_at", hourAgo);
-
-      const relayedThisHour = recentCount ?? 0;
-      const slots = integration.throttle_rate - relayedThisHour;
-      if (slots <= 0) continue; // rate cap hit for this hour
-
-      // Minimum interval between leads: e.g. throttle_rate=20 → 180s between leads
-      const intervalSeconds = Math.round(3600 / integration.throttle_rate);
-      const intervalMs = intervalSeconds * 1000;
-
-      const { data: lastRelayed } = await admin
+      // Fix 4: merge hourly count + last relayed_at into a single query
+      const { data: throttleData } = await admin
         .from("leads")
         .select("relayed_at")
         .eq("integration_id", integration.id)
         .eq("status", "relayed")
+        .gte("relayed_at", hourAgo)
         .order("relayed_at", { ascending: false })
-        .limit(1)
-        .single();
+        .limit(integration.throttle_rate + 1); // fetch up to throttle_rate+1 rows
 
-      const lastRelayedAt = lastRelayed?.relayed_at
-        ? new Date(lastRelayed.relayed_at).getTime()
+      const relayedThisHour = throttleData?.length ?? 0;
+      const slots = integration.throttle_rate - relayedThisHour;
+      if (slots <= 0) continue; // hourly rate cap hit
+
+      // Last relay time — most recent in the result (already sorted DESC)
+      const lastRelayedAt = throttleData?.[0]?.relayed_at
+        ? new Date(throttleData[0].relayed_at).getTime()
         : 0;
+
+      const intervalMs = Math.round(3600 / integration.throttle_rate) * 1000;
       const msSinceLast = Date.now() - lastRelayedAt;
 
-      // Add small jitter (±15s) so leads don't fire on exactly the same second each time
+      // Add small jitter (±15s) so leads don't fire on the same second each time
       const jitterMs = (Math.random() - 0.5) * 30_000;
       if (msSinceLast < intervalMs + jitterMs) continue; // not time yet
     }
@@ -136,15 +130,9 @@ export async function GET(request: NextRequest) {
       await new Promise((r) => setTimeout(r, 200 + Math.random() * 600));
     }
 
-    // Auto-pause: if daily_cap is set and queue is now empty → flip to testing
-    // Prevents leads flowing again the next day without explicit re-activation.
-    const { data: intFull } = await admin
-      .from("deal_integrations")
-      .select("daily_cap")
-      .eq("id", integration.id)
-      .single();
-
-    if (intFull?.daily_cap !== null) {
+    // Fix 3: auto-pause uses integration.daily_cap already in memory — no re-fetch needed.
+    // Only check remaining queue if this integration has a daily cap.
+    if (integration.daily_cap !== null) {
       const { count: remaining } = await admin
         .from("leads")
         .select("id", { count: "exact", head: true })
