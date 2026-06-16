@@ -95,6 +95,14 @@
     {
       "path": "/api/cron/lead-events-cleanup",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/lions-ftd-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/lions-status-sync",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
