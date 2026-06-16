@@ -60,7 +60,7 @@ export async function GET(
     admin.from("leads").select("id", { count: "exact", head: true })
       .eq("integration_id", id)
       .eq("status", "failed")
-      .gte("updated_at", todayStart.toISOString()),
+      .gte("created_at", todayStart.toISOString()),
 
     // Recent 15 leads for this integration (relayed + failed)
     admin.from("leads")
