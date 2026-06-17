@@ -13,12 +13,9 @@ export async function GET() {
 
   const encryptedKey = await encrypt("73C29542-07E5-8507-30E7-495E2A25C2B5");
 
-  // Find deal by partial ID
-  const { data: deal } = await admin
-    .from("deals")
-    .select("id")
-    .filter("id::text", "like", "b2510eee%")
-    .single();
+  // Find deal by partial ID (UUID prefix)
+  const { data: deals } = await admin.from("deals").select("id");
+  const deal = deals?.find((d) => d.id.startsWith("b2510eee")) ?? null;
 
   if (!deal) {
     return NextResponse.json({ error: "Deal b2510eee not found" }, { status: 404 });
