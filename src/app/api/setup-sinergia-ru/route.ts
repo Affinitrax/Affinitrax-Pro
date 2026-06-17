@@ -17,7 +17,7 @@ export async function GET() {
   const { data: deal } = await admin
     .from("deals")
     .select("id")
-    .like("id::text", "b2510eee%")
+    .filter("id::text", "like", "b2510eee%")
     .single();
 
   if (!deal) {
