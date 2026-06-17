@@ -5,6 +5,9 @@
  * Polls GET https://sinergia-api.network/api/v2/conversions (qualified=1 = FTD).
  * Matches by leadRequestIDEncoded → our buyer_lead_id (stored from POST details.leadRequest.ID).
  * On match → updates lead status to 'ftd' and fires seller postbacks.
+ *
+ * Handles multiple Sinergia integrations with different API keys by deduplicating
+ * keys and making one conversions request per unique key.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -54,17 +57,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No Sinergia integrations found" }, { status: 404 });
   }
 
-  let apiKey: string | null = null;
+  // Decrypt all keys and deduplicate — multiple integrations may share the same key
+  const uniqueKeys = new Map<string, string>(); // key → enc (for traceability)
   for (const intg of integrations) {
     if (!intg.auth_header_value_enc) continue;
-    try { apiKey = await decrypt(intg.auth_header_value_enc); break; } catch { continue; }
+    try {
+      const key = await decrypt(intg.auth_header_value_enc);
+      if (!uniqueKeys.has(key)) uniqueKeys.set(key, intg.id);
+    } catch { continue; }
   }
 
-  if (!apiKey) {
-    return NextResponse.json({ error: "Failed to decrypt Sinergia API key" }, { status: 500 });
+  if (uniqueKeys.size === 0) {
+    return NextResponse.json({ error: "Failed to decrypt any Sinergia API key" }, { status: 500 });
   }
-
-  const apiKeyMasked = apiKey.slice(0, 8) + "****" + apiKey.slice(-4);
 
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -76,24 +81,28 @@ export async function GET(request: NextRequest) {
   url.searchParams.set("toDate", toDate);
   url.searchParams.set("itemsPerPage", "1000");
 
-  let conversions: SinergiaConversion[] = [];
-  let rawDebug: unknown = null;
-  try {
-    const resp = await proxyFetch(url.toString(), {
-      headers: { "Api-Key": apiKey, Accept: "application/json" },
-      signal: AbortSignal.timeout(30_000),
-    });
-    const rawText = await resp.text();
-    console.log(`[sinergia-ftd-sync] HTTP ${resp.status} url=${url.toString()} body=${rawText.slice(0, 500)}`);
-    if (!resp.ok) return NextResponse.json({ error: `Sinergia API returned HTTP ${resp.status}`, body: rawText.slice(0, 500) }, { status: 502 });
-    try { rawDebug = JSON.parse(rawText); } catch { rawDebug = rawText.slice(0, 500); }
-    const json = rawDebug as { items: SinergiaConversion[] };
-    conversions = Array.isArray(json.items) ? json.items : [];
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 502 });
+  let allConversions: SinergiaConversion[] = [];
+
+  for (const [apiKey] of uniqueKeys) {
+    try {
+      const resp = await proxyFetch(url.toString(), {
+        headers: { "Api-Key": apiKey, Accept: "application/json" },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!resp.ok) {
+        console.log(`[sinergia-ftd-sync] key=${apiKey.slice(0, 8)}**** HTTP ${resp.status}`);
+        continue;
+      }
+      const json = await resp.json() as { items: SinergiaConversion[] };
+      const items = Array.isArray(json.items) ? json.items : [];
+      console.log(`[sinergia-ftd-sync] key=${apiKey.slice(0, 8)}**** fetched=${items.length}`);
+      allConversions = allConversions.concat(items);
+    } catch (err) {
+      console.log(`[sinergia-ftd-sync] key=${apiKey.slice(0, 8)}**** error=${String(err)}`);
+    }
   }
 
-  const ftdConversions = conversions.filter(c => c.qualified === 1 && c.leadRequestIDEncoded);
+  const ftdConversions = allConversions.filter(c => c.qualified === 1 && c.leadRequestIDEncoded);
 
   let synced = 0, alreadyFtd = 0, notFound = 0;
 
@@ -143,6 +152,6 @@ export async function GET(request: NextRequest) {
     synced++;
   }
 
-  console.log(`[sinergia-ftd-sync] fetched=${conversions.length} ftd_eligible=${ftdConversions.length} synced=${synced} already_ftd=${alreadyFtd} not_found=${notFound}`);
-  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: conversions.length, ftd_eligible: ftdConversions.length, debug_url: url.toString(), debug_raw: rawDebug, debug_key: apiKeyMasked });
+  console.log(`[sinergia-ftd-sync] keys=${uniqueKeys.size} total_fetched=${allConversions.length} ftd_eligible=${ftdConversions.length} synced=${synced} already_ftd=${alreadyFtd} not_found=${notFound}`);
+  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: allConversions.length, ftd_eligible: ftdConversions.length, keys_polled: uniqueKeys.size });
 }
