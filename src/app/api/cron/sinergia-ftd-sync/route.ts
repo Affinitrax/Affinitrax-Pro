@@ -64,6 +64,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to decrypt Sinergia API key" }, { status: 500 });
   }
 
+  const apiKeyMasked = apiKey.slice(0, 8) + "****" + apiKey.slice(-4);
+
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const fromDate = sevenDaysAgo.toISOString().replace("T", " ").slice(0, 19);
@@ -142,5 +144,5 @@ export async function GET(request: NextRequest) {
   }
 
   console.log(`[sinergia-ftd-sync] fetched=${conversions.length} ftd_eligible=${ftdConversions.length} synced=${synced} already_ftd=${alreadyFtd} not_found=${notFound}`);
-  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: conversions.length, ftd_eligible: ftdConversions.length, debug_url: url.toString(), debug_raw: rawDebug });
+  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: conversions.length, ftd_eligible: ftdConversions.length, debug_url: url.toString(), debug_raw: rawDebug, debug_key: apiKeyMasked });
 }
