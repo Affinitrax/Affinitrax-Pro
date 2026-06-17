@@ -43,20 +43,8 @@ export async function POST(
 
   if (!integration) return NextResponse.json({ error: "Integration not found" }, { status: 404 });
 
-  // Find leads that have never been attempted (no relay_attempt event)
-  // to avoid re-sending emails BetLeads may have already seen/blocked
-  const { data: attemptedLeadIds } = await admin
-    .from("lead_events")
-    .select("lead_id")
-    .eq("event_type", "relay_attempt")
-    .then(async (res) => {
-      // Get lead IDs for this deal that were already attempted
-      const ids = (res.data ?? []).map((r: { lead_id: string }) => r.lead_id);
-      return { data: ids };
-    });
-
   // Pick the oldest parked lead matching this integration's geo that was never attempted.
-  // Double-gate: relay_attempts=0 (counter) AND no relay_attempt event (log).
+  // relay_attempts=0 guarantees the lead has not been sent to any buyer.
   let query = admin
     .from("leads")
     .select("id, email, first_name, last_name, phone, country, ip, click_id, sub1, sub2, sub3")
@@ -68,10 +56,6 @@ export async function POST(
 
   if (integration.allowed_geos && integration.allowed_geos.length > 0) {
     query = query.in("country", integration.allowed_geos);
-  }
-
-  if (attemptedLeadIds && attemptedLeadIds.length > 0) {
-    query = query.not("id", "in", `(${attemptedLeadIds.map((id: string) => `"${id}"`).join(",")})`);
   }
 
   const { data: leads } = await query;
