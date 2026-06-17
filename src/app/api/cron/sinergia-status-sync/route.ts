@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 
     const resp = await proxyFetch(url.toString(), {
       headers: { "Api-Key": apiKey, Accept: "application/json" },
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!resp.ok) return NextResponse.json({ error: `Sinergia API returned HTTP ${resp.status}` }, { status: 502 });
