@@ -158,7 +158,7 @@ export async function GET(req: Request) {
   const { data: leads, count } = await admin
     .from("leads")
     .select(
-      "id, status, created_at, email, click_id, sub1, sub2, sub3, country, is_test",
+      "id, status, created_at, email, click_id, sub1, sub2, sub3, country, is_test, ftd_at",
       { count: "exact" }
     )
     .eq("deal_id", apiKey.deal_id)
@@ -178,7 +178,7 @@ export async function GET(req: Request) {
     sub3:       l.sub3,
     country:    l.country,
     is_test:    l.is_test,
-    ftd_at:     null, // never expose FTD timestamp to seller
+    ftd_at:     ftdLabel ? (l.ftd_at ?? null) : null,
   }));
 
   return NextResponse.json({

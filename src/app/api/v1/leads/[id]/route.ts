@@ -53,7 +53,7 @@ export async function GET(
     .from("leads")
     .select("id, deal_id, status, redirect_url, ftd_at, created_at, is_test")
     .eq("id", id)
-    .eq("deal_id", apiKey.deal_id) // enforce ownership
+    .eq("deal_id", apiKey.deal_id)
     .single();
 
   if (!lead) {
@@ -82,7 +82,7 @@ export async function GET(
     lead_id:      lead.id,
     status:       sanitizeStatus(lead.status),
     redirect_url: lead.redirect_url,
-    ftd_at:       null, // never expose FTD timestamp to seller
+    ftd_at:       ftdLabel ? (lead.ftd_at ?? null) : null,
     is_test:      lead.is_test,
     created_at:   lead.created_at,
   });
