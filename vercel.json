@@ -103,6 +103,14 @@
     {
       "path": "/api/cron/lions-status-sync",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/sinergia-ftd-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/sinergia-status-sync",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
