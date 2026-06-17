@@ -75,13 +75,17 @@ export async function GET(request: NextRequest) {
   url.searchParams.set("itemsPerPage", "1000");
 
   let conversions: SinergiaConversion[] = [];
+  let rawDebug: unknown = null;
   try {
     const resp = await proxyFetch(url.toString(), {
       headers: { "Api-Key": apiKey, Accept: "application/json" },
       signal: AbortSignal.timeout(30_000),
     });
-    if (!resp.ok) return NextResponse.json({ error: `Sinergia API returned HTTP ${resp.status}` }, { status: 502 });
-    const json = await resp.json() as { items: SinergiaConversion[] };
+    const rawText = await resp.text();
+    console.log(`[sinergia-ftd-sync] HTTP ${resp.status} url=${url.toString()} body=${rawText.slice(0, 500)}`);
+    if (!resp.ok) return NextResponse.json({ error: `Sinergia API returned HTTP ${resp.status}`, body: rawText.slice(0, 500) }, { status: 502 });
+    try { rawDebug = JSON.parse(rawText); } catch { rawDebug = rawText.slice(0, 500); }
+    const json = rawDebug as { items: SinergiaConversion[] };
     conversions = Array.isArray(json.items) ? json.items : [];
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 502 });
@@ -138,5 +142,5 @@ export async function GET(request: NextRequest) {
   }
 
   console.log(`[sinergia-ftd-sync] fetched=${conversions.length} ftd_eligible=${ftdConversions.length} synced=${synced} already_ftd=${alreadyFtd} not_found=${notFound}`);
-  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: conversions.length, ftd_eligible: ftdConversions.length });
+  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: conversions.length, ftd_eligible: ftdConversions.length, debug_url: url.toString(), debug_raw: rawDebug });
 }
