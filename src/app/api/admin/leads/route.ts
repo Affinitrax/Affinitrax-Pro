@@ -30,6 +30,7 @@ export async function GET(req: Request) {
   const dealId = url.searchParams.get("deal_id");
   const status = url.searchParams.get("status");
   const email = url.searchParams.get("email");
+  const countries = url.searchParams.getAll("country");
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10) || 1);
   const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") ?? "50", 10) || 50));
   const offset = (page - 1) * limit;
@@ -48,6 +49,7 @@ export async function GET(req: Request) {
   if (dealId) query = query.eq("deal_id", dealId);
   if (status) query = query.eq("status", status);
   if (email) query = query.ilike("email", `%${email}%`);
+  if (countries.length > 0) query = query.in("country", countries);
 
   const { data, count, error } = await query;
 

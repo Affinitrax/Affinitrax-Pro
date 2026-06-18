@@ -216,7 +216,8 @@ export default function IntegrationDetailPage() {
       const keysData: ApiKey[] = await fetch(`/api/admin/api-keys?deal_id=${intData.deal_id}`).then((r) => r.json());
       setApiKeys(Array.isArray(keysData) ? keysData : []);
 
-      const parkedRes = await fetch(`/api/admin/leads?deal_id=${intData.deal_id}&status=parked&limit=1`).then((r) => r.json());
+      const geoParams = (intData.allowed_geos ?? []).map((g: string) => `country=${g}`).join("&");
+      const parkedRes = await fetch(`/api/admin/leads?deal_id=${intData.deal_id}&status=parked&limit=1${geoParams ? `&${geoParams}` : ""}`).then((r) => r.json());
       setParkedCount(typeof parkedRes.total === "number" ? parkedRes.total : 0);
       setLoading(false);
     }
