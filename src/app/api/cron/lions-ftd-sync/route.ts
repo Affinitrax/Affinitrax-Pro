@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/integration/crypto";
 import { firePostback } from "@/lib/integration/postback-relay";
+import { sendTelegramMessage } from "@/lib/telegram";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 
 export const runtime = "nodejs";
@@ -85,12 +86,12 @@ export async function GET(request: NextRequest) {
       let lead = null;
 
       if (item.sourceId) {
-        const { data } = await admin.from("leads").select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id").eq("id", item.sourceId).maybeSingle();
+        const { data } = await admin.from("leads").select("id, deal_id, status, email, country, click_id, sub1, sub2, sub3, buyer_lead_id").eq("id", item.sourceId).maybeSingle();
         lead = data;
       }
 
       if (!lead) {
-        const { data } = await admin.from("leads").select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id").eq("buyer_lead_id", item.id).maybeSingle();
+        const { data } = await admin.from("leads").select("id, deal_id, status, email, country, click_id, sub1, sub2, sub3, buyer_lead_id").eq("buyer_lead_id", item.id).maybeSingle();
         lead = data;
       }
 
@@ -129,6 +130,11 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      await sendTelegramMessage(
+      `💰 <b>FTD</b>\n`
+      + `Deal: ${((lead.deal_id ?? "").slice(0,8)}) · ${lead.country ?? "—"}\n`
+      + `Email: ${lead.email ?? "—"}`
+    ).catch(() => {});
       synced++;
     }
 

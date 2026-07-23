@@ -117,11 +117,18 @@ export function extractByPath(
   path: string
 ): string | null {
   if (!path || obj === null || typeof obj !== "object") return null;
-  const parts = path.split(".");
+  // Split on dots, then expand array notation: "foo[0]" → ["foo", "0"]
+  const parts = path.split(".").flatMap((p) => {
+    const m = p.match(/^([^\[]+)(?:\[(\d+)\])?$/);
+    if (!m) return [p];
+    return m[2] !== undefined ? [m[1], m[2]] : [m[1]];
+  });
   let current: unknown = obj;
   for (const part of parts) {
     if (current === null || typeof current !== "object") return null;
-    current = (current as Record<string, unknown>)[part];
+    current = Array.isArray(current)
+      ? current[parseInt(part, 10)]
+      : (current as Record<string, unknown>)[part];
   }
   if (current === null || current === undefined) return null;
   return String(current);

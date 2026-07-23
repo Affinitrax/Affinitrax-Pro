@@ -40,7 +40,7 @@ export async function GET(req: Request) {
   let query = admin
     .from("leads")
     .select(
-      "id, deal_id, partner_id, email, first_name, last_name, phone, country, click_id, status, buyer_lead_id, buyer_crm_status, relay_attempts, relay_error, is_test, created_at, relayed_at",
+      "id, deal_id, partner_id, email, first_name, last_name, phone, country, click_id, status, buyer_lead_id, buyer_crm_status, lead_disposition, relay_attempts, relay_error, is_test, created_at, relayed_at",
       { count: "exact" }
     )
     .order("created_at", { ascending: false })

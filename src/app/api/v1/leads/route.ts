@@ -42,13 +42,17 @@ import { isTestPatternEmail } from "@/lib/integration/email-quality";
 
 /**
  * Maps internal relay states to the partner-safe status surface.
- * FTD is internal by default — only exposed to sellers when ftdLabel is set.
- * Sellers only ever see: relayed | in_progress | rejected (+ optional ftdLabel)
+ * lead_disposition (manually set by admin) always takes priority — used for
+ * parked/data leads where we want to surface a real outcome to sellers without
+ * exposing internal relay state or buyer CRM data.
+ * Live traffic leads have lead_disposition=null so fall through to existing logic.
  */
-function sanitizeStatus(s: string, ftdLabel: string | null = null): string {
+function sanitizeStatus(s: string, ftdLabel: string | null = null, disposition: string | null = null): string {
+  if (disposition) return disposition;
   if (s === "rejected") return "rejected";
   if (s === "relayed")  return "relayed";
   if (s === "ftd" && ftdLabel) return ftdLabel;
+  if (s === "failed" && ftdLabel) return "rejected";
   // ftd (no label) / received / relaying / queued / parked / failed → in_progress
   return "in_progress";
 }
@@ -158,7 +162,7 @@ export async function GET(req: Request) {
   const { data: leads, count } = await admin
     .from("leads")
     .select(
-      "id, status, created_at, email, click_id, sub1, sub2, sub3, country, is_test, ftd_at",
+      "id, status, created_at, email, click_id, sub1, sub2, sub3, country, is_test, ftd_at, buyer_crm_status, lead_disposition",
       { count: "exact" }
     )
     .eq("deal_id", apiKey.deal_id)
@@ -169,7 +173,7 @@ export async function GET(req: Request) {
 
   const sanitized = (leads ?? []).map((l) => ({
     lead_id:    l.id,
-    status:     sanitizeStatus(l.status as string, ftdLabel),
+    status:     sanitizeStatus(l.status as string, ftdLabel, l.lead_disposition as string | null),
     created_at: l.created_at,
     email:      l.email,
     click_id:   l.click_id,
@@ -177,8 +181,9 @@ export async function GET(req: Request) {
     sub2:       l.sub2,
     sub3:       l.sub3,
     country:    l.country,
-    is_test:    l.is_test,
-    ftd_at:     ftdLabel ? (l.ftd_at ?? null) : null,
+    is_test:        l.is_test,
+    ftd_at:         ftdLabel ? (l.ftd_at ?? null) : null,
+    crm_status:     ftdLabel ? (l.buyer_crm_status ?? null) : undefined,
   }));
 
   return NextResponse.json({

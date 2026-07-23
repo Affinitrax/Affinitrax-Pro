@@ -27,6 +27,10 @@ const BLOCKED_DOMAINS = new Set([
   "guerrillamailblock.com",
   "asda.gg",
   "aswda.gg",
+  // RFC 2606 reserved — used exclusively for documentation/testing
+  "example.com",
+  "example.net",
+  "example.org",
 ]);
 
 /**

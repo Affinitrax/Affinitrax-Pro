@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { firePostback } from "@/lib/integration/postback-relay";
+import { sendTelegramMessage } from "@/lib/telegram";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
 
 export const runtime = "nodejs";
@@ -114,8 +115,9 @@ export async function GET(request: NextRequest) {
     // buyer_lead_id stores the numeric ID as string
     const { data: dbLead } = await admin
       .from("leads")
-      .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id")
+      .select("id, deal_id, status, email, country, click_id, sub1, sub2, sub3, buyer_lead_id")
       .eq("buyer_lead_id", String(phoenixLead.id))
+      .in("deal_id", ["bb1a20d2-c431-46b4-848d-f3d4c0af2c36", "fb45e52d-85f8-4b40-bf53-40f665937c5a", "b2510eee-1057-4bcc-9661-a5760eaac6ec", "925072d7-5fb1-4033-8253-fd0cc06ad92b", "8de0711e-a541-4f20-8bba-705b2cbc59ac"])
       .maybeSingle();
 
     if (!dbLead) {
@@ -184,6 +186,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    await sendTelegramMessage(
+      `💰 <b>FTD</b>\n`
+      + `Deal: ${((dbLead.deal_id ?? "").slice(0,8)}) · ${dbLead.country ?? "—"}\n`
+      + `Email: ${dbLead.email ?? "—"}`
+    ).catch(() => {});
     synced++;
   }
 

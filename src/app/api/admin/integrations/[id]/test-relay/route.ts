@@ -43,25 +43,25 @@ export async function POST(
 
   if (!integration) return NextResponse.json({ error: "Integration not found" }, { status: 404 });
 
-  // Pick the oldest parked lead matching this integration's geo that was never attempted.
-  // relay_attempts=0 guarantees the lead has not been sent to any buyer.
+  // Only relay test leads (is_test=true). Real leads are never sent via this endpoint.
   let query = admin
     .from("leads")
     .select("id, email, first_name, last_name, phone, country, ip, click_id, sub1, sub2, sub3")
     .eq("deal_id", integration.deal_id)
     .eq("status", "parked")
+    .eq("is_test", true)
     .eq("relay_attempts", 0)
     .order("created_at", { ascending: true })
     .limit(1);
 
-  if (integration.allowed_geos && integration.allowed_geos.length > 0) {
+  if (integration.allowed_geos?.length > 0) {
     query = query.in("country", integration.allowed_geos);
   }
 
   const { data: leads } = await query;
 
   if (!leads || leads.length === 0) {
-    return NextResponse.json({ error: "No parked leads found for this integration's geo" }, { status: 404 });
+    return NextResponse.json({ error: "No test leads found for this integration's geo" }, { status: 404 });
   }
 
   const lead = leads[0];

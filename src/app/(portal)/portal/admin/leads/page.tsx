@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 type DealOption = {
   id: string;
@@ -21,6 +21,7 @@ type Lead = {
   status: string;
   buyer_lead_id: string | null;
   buyer_crm_status: string | null;
+  lead_disposition: string | null;
   relay_attempts: number;
   relay_error: string | null;
   is_test: boolean;
@@ -38,6 +39,28 @@ const STATUS_STYLES: Record<string, string> = {
   rejected: "bg-[#1e293b] text-[#475569] border border-white/10",
 };
 
+const DISPOSITION_OPTIONS = [
+  { value: "pending",        label: "Pending" },
+  { value: "no_answer",      label: "No Answer" },
+  { value: "callback",       label: "Callback" },
+  { value: "interested",     label: "Interested" },
+  { value: "not_interested", label: "Not Interested" },
+  { value: "invalid",        label: "Invalid" },
+  { value: "duplicate",      label: "Duplicate" },
+  { value: "converted",      label: "Converted" },
+];
+
+const DISPOSITION_STYLES: Record<string, string> = {
+  pending:        "bg-[#1e293b] text-[#94a3b8] border border-white/10",
+  no_answer:      "bg-[#1e293b] text-[#475569] border border-white/10",
+  callback:       "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+  interested:     "bg-blue-500/15 text-blue-400 border border-blue-500/30",
+  not_interested: "bg-red-500/10 text-red-400 border border-red-500/20",
+  invalid:        "bg-red-500/15 text-red-400 border border-red-500/30",
+  duplicate:      "bg-[#1e293b] text-[#475569] border border-white/10",
+  converted:      "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
+};
+
 export default function AdminLeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
@@ -50,35 +73,84 @@ export default function AdminLeadsPage() {
   const [filterDeal, setFilterDeal] = useState("");
   const [deals, setDeals] = useState<DealOption[]>([]);
 
+  // Bulk disposition state
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDisposition, setBulkDisposition] = useState("");
+  const [applying, setApplying] = useState(false);
+  const [applyResult, setApplyResult] = useState<string | null>(null);
+
   useEffect(() => {
     fetch("/api/admin/deals/list")
       .then((r) => r.json())
       .then((d: DealOption[]) => setDeals(Array.isArray(d) ? d : []));
   }, []);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const params = new URLSearchParams({ page: String(page), limit: "25" });
-      if (filterStatus) params.set("status", filterStatus);
-      if (filterEmail) params.set("email", filterEmail);
-      if (filterDeal) params.set("deal_id", filterDeal);
+  const load = useCallback(async () => {
+    setLoading(true);
+    const params = new URLSearchParams({ page: String(page), limit: "25" });
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterEmail) params.set("email", filterEmail);
+    if (filterDeal) params.set("deal_id", filterDeal);
 
-      const res = await fetch(`/api/admin/leads?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setLeads(data.leads);
-        setTotal(data.total);
-        setPages(data.pages);
-      }
-      setLoading(false);
+    const res = await fetch(`/api/admin/leads?${params}`);
+    if (res.ok) {
+      const data = await res.json();
+      setLeads(data.leads);
+      setTotal(data.total);
+      setPages(data.pages);
     }
-    load();
+    setLoading(false);
+    setSelected(new Set());
+  }, [page, filterStatus, filterEmail, filterDeal]);
+
+  useEffect(() => {
+    void load();
+    // load is stable per [page, filterStatus, filterEmail, filterDeal]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, filterStatus, filterEmail, filterDeal]);
 
   function fmt(dt: string | null) {
     if (!dt) return "—";
     return new Date(dt).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" });
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selected.size === leads.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(leads.map((l) => l.id)));
+    }
+  }
+
+  async function applyDisposition() {
+    if (!bulkDisposition || selected.size === 0) return;
+    setApplying(true);
+    setApplyResult(null);
+    const res = await fetch("/api/admin/leads/disposition", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lead_ids: [...selected],
+        disposition: bulkDisposition === "__clear__" ? null : bulkDisposition,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setApplyResult(`Updated ${data.updated} lead${data.updated !== 1 ? "s" : ""}`);
+      await load();
+    } else {
+      setApplyResult(`Error: ${data.error}`);
+    }
+    setApplying(false);
+    setBulkDisposition("");
   }
 
   return (
@@ -139,6 +211,45 @@ export default function AdminLeadsPage() {
         </button>
       </div>
 
+      {/* Bulk disposition bar — only visible when leads are selected */}
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 mb-4 px-4 py-3 bg-[#13131f] border border-[#00d4ff]/20 rounded-xl">
+          <span className="text-sm text-[#94a3b8]">
+            <span className="text-white font-medium">{selected.size}</span> lead{selected.size !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex-1" />
+          <select
+            value={bulkDisposition}
+            onChange={(e) => setBulkDisposition(e.target.value)}
+            className="bg-[#0d0d1a] border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[#00d4ff]/40"
+          >
+            <option value="">Set seller status…</option>
+            {DISPOSITION_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+            <option value="__clear__">— Clear override</option>
+          </select>
+          <button
+            onClick={applyDisposition}
+            disabled={!bulkDisposition || applying}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-[#00d4ff]/15 text-[#00d4ff] border border-[#00d4ff]/30 hover:bg-[#00d4ff]/25 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {applying ? "Applying…" : "Apply"}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-[#475569] hover:text-[#94a3b8] text-sm transition-colors"
+          >
+            Cancel
+          </button>
+          {applyResult && (
+            <span className={`text-xs ${applyResult.startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
+              {applyResult}
+            </span>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <div className="glass rounded-2xl p-10 text-center border border-white/5">
           <p className="text-[#475569] text-sm">Loading…</p>
@@ -155,10 +266,19 @@ export default function AdminLeadsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/7">
+                    <th className="px-4 py-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={selected.size === leads.length && leads.length > 0}
+                        onChange={toggleAll}
+                        className="accent-[#00d4ff] cursor-pointer"
+                      />
+                    </th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Email</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Name</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Country</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Status</th>
+                    <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Seller View</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">CRM Status</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Buyer ID</th>
                     <th className="text-left px-4 py-3 text-[#475569] text-xs uppercase tracking-widest font-semibold">Deal</th>
@@ -170,8 +290,18 @@ export default function AdminLeadsPage() {
                   {leads.map((lead, i) => (
                     <tr
                       key={lead.id}
-                      className={`border-b border-white/5 hover:bg-white/3 transition-colors ${i === leads.length - 1 ? "border-b-0" : ""}`}
+                      className={`border-b border-white/5 transition-colors ${
+                        selected.has(lead.id) ? "bg-[#00d4ff]/5" : "hover:bg-white/3"
+                      } ${i === leads.length - 1 ? "border-b-0" : ""}`}
                     >
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(lead.id)}
+                          onChange={() => toggleSelect(lead.id)}
+                          className="accent-[#00d4ff] cursor-pointer"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="text-white text-xs">{lead.email}</span>
@@ -200,6 +330,15 @@ export default function AdminLeadsPage() {
                             <span className="text-[10px] text-[#334155]">×{lead.relay_attempts}</span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {lead.lead_disposition ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${DISPOSITION_STYLES[lead.lead_disposition] ?? ""}`}>
+                            {lead.lead_disposition.replace(/_/g, " ")}
+                          </span>
+                        ) : (
+                          <span className="text-[#2d3748] text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {lead.buyer_crm_status ? (
@@ -237,7 +376,7 @@ export default function AdminLeadsPage() {
             </div>
           </div>
 
-          {/* Pagination — always visible */}
+          {/* Pagination */}
           <div className="flex items-center justify-between mt-4">
             <p className="text-xs text-[#475569]">
               Showing {((page - 1) * 25) + 1}–{Math.min(page * 25, total)} of {total.toLocaleString()} leads

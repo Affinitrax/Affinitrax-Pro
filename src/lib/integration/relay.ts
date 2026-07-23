@@ -55,6 +55,7 @@ type DealIntegration = {
   auth_header_name: string;
   auth_header_value_enc: string | null;
   content_type: "json" | "form_urlencoded";
+  skip_proxy: boolean;
   response_lead_id_path: string;
   response_redirect_url_path: string | null;
   response_success_path: string | null;   // e.g. "success" — must equal response_success_value
@@ -279,6 +280,7 @@ export async function relayLead(
   const enrichedPayload: Record<string, string | null | undefined> = {
     ...(payload as Record<string, string | null | undefined>),
     _lead_id: leadId,   // maps to buyer "affclickid" / "click_id" / etc.
+    _full_name: [payload.first_name, payload.last_name].filter(Boolean).join(" ") || null,
   };
   const { mapped, missingRequired } = applyFieldMappings(
     enrichedPayload,
@@ -296,6 +298,8 @@ export async function relayLead(
   const headers: Record<string, string> = {
     ...buildHeaders(integration, credential),
   };
+
+  headers["Accept"] = "application/json";
 
   let bodyStr: string;
   if (integration.content_type === "json") {
@@ -320,7 +324,8 @@ export async function relayLead(
   let redirectUrl: string | undefined;
 
   try {
-    const resp = await proxyFetch(url, {
+    const fetcher = integration.skip_proxy ? fetch : proxyFetch;
+    const resp = await fetcher(url, {
       method: "POST",
       headers,
       body: bodyStr,
@@ -345,7 +350,12 @@ export async function relayLead(
         // {"success":false,"message":"Offer not found!"} on rejection).
         if (integration.response_success_path) {
           const successVal = extractByPath(parsed, integration.response_success_path);
-          if (successVal !== (integration.response_success_value ?? "true")) {
+          // "__notnull__" = any non-null value is success (e.g. SIS returns lead UUID on accept, null on reject)
+          const expectedVal = integration.response_success_value ?? "true";
+          const isSuccess = expectedVal === "__notnull__"
+            ? successVal !== null
+            : successVal === expectedVal;
+          if (!isSuccess) {
             // Buyer body signals failure despite HTTP 2xx — treat as relay error
             const rawMsg =
               extractByPath(parsed, "errorMessage") ??

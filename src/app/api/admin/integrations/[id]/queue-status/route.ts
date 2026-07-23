@@ -50,10 +50,10 @@ export async function GET(
       .eq("integration_id", id)
       .eq("status", "queued"),
 
-    // Relayed today
+    // Relayed today — include ftd since those were also relayed
     admin.from("leads").select("id", { count: "exact", head: true })
       .eq("integration_id", id)
-      .eq("status", "relayed")
+      .in("status", ["relayed", "ftd"])
       .gte("relayed_at", todayStart.toISOString()),
 
     // Failed today
@@ -66,7 +66,7 @@ export async function GET(
     admin.from("leads")
       .select("id, email, status, buyer_lead_id, relay_error, relayed_at, created_at, country")
       .eq("integration_id", id)
-      .in("status", ["relayed", "failed", "queued", "relaying"])
+      .in("status", ["relayed", "ftd", "failed", "queued", "relaying"])
       .order("created_at", { ascending: false })
       .limit(15),
 

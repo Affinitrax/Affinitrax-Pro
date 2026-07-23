@@ -1,34 +1,28 @@
 /**
- * GET /api/cron/ocean-latam-start
+ * GET /api/cron/sinergia-latam-start
  *
  * Fires daily at 13:00 UTC (16:00 GMT+3).
- * Activates all Ocean LATAM integrations (MX, CL, CO, PE, BO)
- * and re-queues any parked leads.
+ * Activates Sinergia MX and CL integrations and re-queues parked leads.
  *
  * Fallback logic for MX and CL:
  *   Primary deal: 93ef363b (fills first)
  *   Fallback deal: 36a62f7e (auto-fills when primary exhausted)
  * No daily DB overhead — runs once/day at start time.
  */
-
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
-const OCEAN_LATAM_IDS = [
-  "241613d5-7e62-4118-8cfa-4bb0d88449a9", // Ocean — MX
-  "38f4b164-5547-4e8d-9c1a-6e003ad71491", // Ocean — CL
-  "e25427ac-9f4d-43e2-b827-beea303e86d1", // Ocean — CO
-  "df419861-e67a-4278-95d0-58ec70704144", // Ocean — PE
-  "f58aa4f0-4b73-4e36-8cb0-f8644dd50a35", // Ocean — BO
+const SINERGIA_LATAM_IDS = [
+  "b37fc0b6-a1af-4655-9ff9-678bd20375c3", // Sinergia — MX
+  "aeb88fcb-e4e6-401f-ad92-a886992c334c", // Sinergia — CL
 ];
 
 const DAILY_CAP = 100;
 const FALLBACK_DEAL = "36a62f7e-d02a-472d-98ce-b57d37936efc";
 
-// For MX and CL: if primary deal parked leads < DAILY_CAP, fill the gap from fallback deal.
 async function fillFromFallback(
   admin: SupabaseClient,
   integrationId: string,
@@ -70,22 +64,22 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  await admin.from("deal_integrations").update({ status: "active" }).in("id", OCEAN_LATAM_IDS);
+  await admin.from("deal_integrations").update({ status: "active" }).in("id", SINERGIA_LATAM_IDS);
 
   // Fill MX and CL from fallback deal if primary is exhausted
   const [mxFilled, clFilled] = await Promise.all([
-    fillFromFallback(admin, "241613d5-7e62-4118-8cfa-4bb0d88449a9", "MX"),
-    fillFromFallback(admin, "38f4b164-5547-4e8d-9c1a-6e003ad71491", "CL"),
+    fillFromFallback(admin, "b37fc0b6-a1af-4655-9ff9-678bd20375c3", "MX"),
+    fillFromFallback(admin, "aeb88fcb-e4e6-401f-ad92-a886992c334c", "CL"),
   ]);
 
   const { data } = await admin
     .from("leads")
     .update({ status: "queued", relay_attempts: 0, relay_error: null })
-    .in("integration_id", OCEAN_LATAM_IDS)
+    .in("integration_id", SINERGIA_LATAM_IDS)
     .eq("status", "parked")
     .select("id");
 
   const requeued = data?.length ?? 0;
-  console.log(`[ocean-latam-start] activated — requeued=${requeued} fallback_mx=${mxFilled} fallback_cl=${clFilled}`);
+  console.log(`[sinergia-latam-start] activated — requeued=${requeued} fallback_mx=${mxFilled} fallback_cl=${clFilled}`);
   return NextResponse.json({ activated: true, requeued, fallback_mx: mxFilled, fallback_cl: clFilled });
 }

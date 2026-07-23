@@ -51,7 +51,7 @@ export async function GET(
 
   const { data: lead } = await admin
     .from("leads")
-    .select("id, deal_id, status, redirect_url, ftd_at, created_at, is_test")
+    .select("id, deal_id, status, redirect_url, ftd_at, created_at, is_test, lead_disposition, buyer_crm_status")
     .eq("id", id)
     .eq("deal_id", apiKey.deal_id)
     .single();
@@ -71,7 +71,9 @@ export async function GET(
     ? (dealConfig.ftd_label ?? "ftd")
     : null;
 
+  const leadDisposition = lead.lead_disposition as string | null;
   function sanitizeStatus(s: string): string {
+    if (leadDisposition && !dealConfig?.expose_ftd) return leadDisposition;
     if (s === "rejected") return "rejected";
     if (s === "relayed") return "relayed";
     if (s === "ftd" && ftdLabel) return ftdLabel;
@@ -79,11 +81,12 @@ export async function GET(
   }
 
   return NextResponse.json({
-    lead_id:      lead.id,
-    status:       sanitizeStatus(lead.status),
-    redirect_url: lead.redirect_url,
-    ftd_at:       ftdLabel ? (lead.ftd_at ?? null) : null,
-    is_test:      lead.is_test,
-    created_at:   lead.created_at,
+    lead_id:         lead.id,
+    status:          sanitizeStatus(lead.status),
+    redirect_url:    lead.redirect_url,
+    ftd_at:          ftdLabel ? (lead.ftd_at ?? null) : null,
+    crm_status:      dealConfig?.expose_ftd ? (lead.buyer_crm_status ?? null) : undefined,
+    is_test:         lead.is_test,
+    created_at:      lead.created_at,
   });
 }
