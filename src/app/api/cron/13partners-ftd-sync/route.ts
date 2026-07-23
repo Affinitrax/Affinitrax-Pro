@@ -31,18 +31,14 @@ async function fetchLeads(dateStart: string, dateEnd: string): Promise<P13Lead[]
   let page = 1;
 
   while (true) {
-    const url = new URL(`${BASE_URL}/api/web-master/leads`);
-    url.searchParams.set("page", String(page));
-    url.searchParams.set("per_page", "1000");
-    url.searchParams.set("date_start", dateStart);
-    url.searchParams.set("date_end", dateEnd);
-
-    const resp = await fetch(url.toString(), {
+    const resp = await fetch(`${BASE_URL}/api/web-master/leads`, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${TOKEN}`,
+        "Content-Type": "application/json",
         Accept: "application/json",
       },
+      body: JSON.stringify({ page, per_page: 1000, date_start: dateStart, date_end: dateEnd }),
       signal: AbortSignal.timeout(30_000),
     });
 
