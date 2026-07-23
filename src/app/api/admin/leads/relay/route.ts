@@ -13,17 +13,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import { relayLead } from "@/lib/integration/relay";
 
-async function requireAdmin() {
+async function requireAdmin(req: Request): Promise<boolean> {
+  // Accept cron secret as Bearer token (for server-side calls)
+  const authHeader = req.headers.get("authorization");
+  const validTokens = [process.env.CRON_SECRET, process.env.SUPABASE_CRON_SECRET].filter(Boolean);
+  if (validTokens.some((t) => authHeader === `Bearer ${t}`)) return true;
+
+  // Fall back to Supabase session (browser admin UI)
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  if (!user) return false;
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  return profile?.role === "admin" ? user : null;
+  return profile?.role === "admin";
 }
 
 export async function POST(req: Request) {
-  const user = await requireAdmin();
-  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const authed = await requireAdmin(req);
+  if (!authed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { lead_id, integration_id } = await req.json();
   if (!lead_id || !integration_id) {
