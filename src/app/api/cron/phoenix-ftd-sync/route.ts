@@ -187,9 +187,7 @@ export async function GET(request: NextRequest) {
     }
 
     await sendTelegramMessage(
-      `💰 <b>FTD</b>\n`
-      + `Deal: ${((dbLead.deal_id ?? "").slice(0,8)}) · ${dbLead.country ?? "—"}\n`
-      + `Email: ${dbLead.email ?? "—"}`
+      `💰 FTD | Deal: ${dbLead.deal_id?.slice(0,8) ?? "?"} | ${dbLead.country ?? "?"} | ${dbLead.email ?? "?"}`
     ).catch(() => {});
     synced++;
   }
