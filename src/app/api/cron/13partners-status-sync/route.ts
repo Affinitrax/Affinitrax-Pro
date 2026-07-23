@@ -26,7 +26,7 @@ async function fetchLeads(dateStart: string, dateEnd: string): Promise<P13Lead[]
 
   while (true) {
     const resp = await fetch(`${BASE_URL}/api/web-master/leads`, {
-      method: "GET",
+      method: "POST",
       headers: {
         Authorization: `Bearer ${TOKEN}`,
         "Content-Type": "application/json",
