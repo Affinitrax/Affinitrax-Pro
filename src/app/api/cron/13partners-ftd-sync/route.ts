@@ -143,7 +143,6 @@ export async function GET(request: NextRequest) {
     synced++;
   }
 
-  const leadIds = allLeads.map((l) => ({ id: l.id, is_action: l.is_action, status: l.status?.name }));
   console.log(`[13partners-ftd-sync] fetched=${allLeads.length} ftd=${ftdLeads.length} synced=${synced} already_ftd=${alreadyFtd} not_found=${notFound}`);
-  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: allLeads.length, debug_leads: leadIds });
+  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: allLeads.length });
 }
