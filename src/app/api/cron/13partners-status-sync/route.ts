@@ -70,7 +70,8 @@ export async function GET(request: NextRequest) {
   const from = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
-  const allLeads = await fetchLeads(fmt(from), fmt(now));
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const allLeads = await fetchLeads(fmt(from), fmt(tomorrow));
   const withStatus = allLeads.filter((l) => l.status?.name);
 
   let synced = 0;
