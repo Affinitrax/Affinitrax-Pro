@@ -31,14 +31,17 @@ async function fetchLeads(dateStart: string, dateEnd: string): Promise<P13Lead[]
   let page = 1;
 
   while (true) {
-    const resp = await fetch(`${BASE_URL}/api/web-master/leads`, {
-      method: "POST",
+    const url = new URL(`${BASE_URL}/api/web-master/leads`);
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("per_page", "1000");
+    url.searchParams.set("date_start", dateStart);
+    url.searchParams.set("date_end", dateEnd);
+    const resp = await fetch(url.toString(), {
+      method: "GET",
       headers: {
         Authorization: `Bearer ${TOKEN}`,
-        "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ page, per_page: 1000, date_start: dateStart, date_end: dateEnd }),
       signal: AbortSignal.timeout(30_000),
     });
 
@@ -140,6 +143,7 @@ export async function GET(request: NextRequest) {
     synced++;
   }
 
+  const leadIds = allLeads.map((l) => ({ id: l.id, is_action: l.is_action, status: l.status?.name }));
   console.log(`[13partners-ftd-sync] fetched=${allLeads.length} ftd=${ftdLeads.length} synced=${synced} already_ftd=${alreadyFtd} not_found=${notFound}`);
-  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: allLeads.length });
+  return NextResponse.json({ synced, already_ftd: alreadyFtd, not_found: notFound, total_fetched: allLeads.length, debug_leads: leadIds });
 }
