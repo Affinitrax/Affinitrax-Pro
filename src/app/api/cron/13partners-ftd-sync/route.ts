@@ -21,7 +21,7 @@ const TOKEN = process.env.PARTNERS13_API_TOKEN!;
 type P13Lead = {
   id: number;
   email?: string;
-  is_action: number;
+  is_action: number | string;
   action_time?: string;
   status?: { id: number; name: string };
 };
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
   const allLeads = await fetchLeads(fmt(from), fmt(now));
-  const ftdLeads = allLeads.filter((l) => l.is_action === 1);
+  const ftdLeads = allLeads.filter((l) => Number(l.is_action) === 1);
 
   let synced = 0;
   let alreadyFtd = 0;
