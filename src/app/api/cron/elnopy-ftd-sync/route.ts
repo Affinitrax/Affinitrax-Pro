@@ -23,6 +23,7 @@ const ELNOPY_LINK_ID = "90";
 const ELNOPY_DEAL_IDS = [
   "fb45e52d-85f8-4b40-bf53-40f665937c5a", // Bellora
   "c9701057-7a3c-450d-a1f6-3026e7aafab7", // AVD
+  "15c1e9d6-b408-4fef-ab54-f7f77ba4e319", // CA
 ];
 
 function proxyFetch(url: string, init: RequestInit): Promise<Response> {
