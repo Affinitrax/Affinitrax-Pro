@@ -11,12 +11,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { firePostback } from "@/lib/integration/postback-relay";
-import { fetch as undiciFetch, ProxyAgent } from "undici";
-
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const FIXIE_URL = process.env.FIXIE_URL;
 const ELNOPY_API_TOKEN = "B9y6Ub203YNvc29YA0mZ5qldhJ0u21EZlCHTTwh9RPPKvrZ0Jnm41PCU2H72";
 const ELNOPY_BASE_URL = "https://tracking.tourmanager.network";
 const ELNOPY_LINK_ID = "90";
@@ -25,14 +22,6 @@ const ELNOPY_DEAL_IDS = [
   "c9701057-7a3c-450d-a1f6-3026e7aafab7", // AVD
   "15c1e9d6-b408-4fef-ab54-f7f77ba4e319", // CA
 ];
-
-function proxyFetch(url: string, init: RequestInit): Promise<Response> {
-  if (FIXIE_URL) {
-    const dispatcher = new ProxyAgent({ uri: FIXIE_URL, headersTimeout: 0, bodyTimeout: 0 });
-    return undiciFetch(url, { ...init, dispatcher } as Parameters<typeof undiciFetch>[1]) as unknown as Promise<Response>;
-  }
-  return fetch(url, init);
-}
 
 type ElnopyLead = {
   id: number;
@@ -68,11 +57,11 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("api_token", ELNOPY_API_TOKEN);
     url.searchParams.set("acq", "1");
     url.searchParams.set("link_id", ELNOPY_LINK_ID);
-    url.searchParams.set("limit", "500");
+    url.searchParams.set("limit", "1000");
     url.searchParams.set("page", String(page));
 
     try {
-      const resp = await proxyFetch(url.toString(), {
+      const resp = await fetch(url.toString(), {
         headers: { Accept: "application/json" },
         signal: AbortSignal.timeout(30_000),
       });
@@ -86,7 +75,7 @@ export async function GET(request: NextRequest) {
       allLeads = allLeads.concat(items);
 
       // API returns up to 500 per page — if less than 500 returned, we're done
-      hasMore = items.length === 500;
+      hasMore = items.length === 1000;
       page++;
     } catch (err) {
       return NextResponse.json({ error: String(err) }, { status: 502 });

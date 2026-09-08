@@ -10,23 +10,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { fetch as undiciFetch, ProxyAgent } from "undici";
-
 export const runtime = "nodejs";
 export const maxDuration = 120;
-
-const FIXIE_URL = process.env.FIXIE_URL;
 const ELNOPY_API_TOKEN = "B9y6Ub203YNvc29YA0mZ5qldhJ0u21EZlCHTTwh9RPPKvrZ0Jnm41PCU2H72";
 const ELNOPY_BASE_URL = "https://tracking.tourmanager.network";
 const ELNOPY_LINK_ID = "90";
-
-function proxyFetch(url: string, init: RequestInit): Promise<Response> {
-  if (FIXIE_URL) {
-    const dispatcher = new ProxyAgent({ uri: FIXIE_URL, headersTimeout: 0, bodyTimeout: 0 });
-    return undiciFetch(url, { ...init, dispatcher } as Parameters<typeof undiciFetch>[1]) as unknown as Promise<Response>;
-  }
-  return fetch(url, init);
-}
 
 type ElnopyLead = {
   id: number;
@@ -61,11 +49,11 @@ export async function GET(request: NextRequest) {
     const url = new URL(`${ELNOPY_BASE_URL}/api/v3/get-leads`);
     url.searchParams.set("api_token", ELNOPY_API_TOKEN);
     url.searchParams.set("link_id", ELNOPY_LINK_ID);
-    url.searchParams.set("limit", "500");
+    url.searchParams.set("limit", "1000");
     url.searchParams.set("page", String(page));
 
     try {
-      const resp = await proxyFetch(url.toString(), {
+      const resp = await fetch(url.toString(), {
         headers: { Accept: "application/json" },
         signal: AbortSignal.timeout(30_000),
       });
@@ -78,7 +66,7 @@ export async function GET(request: NextRequest) {
       const items = json?.data ?? [];
       allLeads = allLeads.concat(items);
 
-      hasMore = items.length === 500;
+      hasMore = items.length === 1000;
       page++;
     } catch (err) {
       return NextResponse.json({ error: String(err) }, { status: 502 });
