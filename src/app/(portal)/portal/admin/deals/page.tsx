@@ -84,7 +84,7 @@ function AdminDealRow({ deal, onUpdated }: { deal: Deal; onUpdated: () => void }
 
   const status = deal.status ?? "pending";
   const statusStyle = STATUS_STYLES[status] ?? "bg-gray-500/15 text-gray-400 border border-gray-500/30";
-  const partner = deal.partner_company || deal.partner_email || deal.requester_id.slice(0, 8);
+  const partner = deal.partner_company || deal.partner_email || deal.requester_id?.slice(0, 8) || "—";
 
   return (
     <>
