@@ -159,6 +159,22 @@
     {
       "path": "/api/cron/wildcash-ftd-sync",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/ftdkitchen-ftd-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/ftdkitchen-status-sync",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/c10-ftd-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/c10-status-sync",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
