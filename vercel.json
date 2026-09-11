@@ -175,6 +175,14 @@
     {
       "path": "/api/cron/c10-status-sync",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/ftdkitchen-africa-start",
+      "schedule": "30 7 * * 1-5"
+    },
+    {
+      "path": "/api/cron/ftdkitchen-africa-stop",
+      "schedule": "30 15 * * 1-5"
     }
   ]
 }
