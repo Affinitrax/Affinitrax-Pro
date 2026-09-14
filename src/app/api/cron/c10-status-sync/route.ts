@@ -20,6 +20,7 @@ const C10_BASE_URL = "https://c10.verdcrm.com/gcrm/api/";
 const C10_INTEGRATION_ID = "0a9c50a8-777d-4b92-9300-6a771d20ade1";
 const C10_DEAL_IDS = [
   "1fa6a467-4534-410f-86a3-2ac72f61a951", // IT
+  "15c1e9d6-b408-4fef-ab54-f7f77ba4e319", // CH/CA/AT/DK (IT traffic via C10)
 ];
 
 const FIXIE_URL = process.env.FIXIE_URL;
