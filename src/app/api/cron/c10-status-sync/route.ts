@@ -21,6 +21,7 @@ const C10_INTEGRATION_ID = "0a9c50a8-777d-4b92-9300-6a771d20ade1";
 const C10_DEAL_IDS = [
   "1fa6a467-4534-410f-86a3-2ac72f61a951", // IT
   "15c1e9d6-b408-4fef-ab54-f7f77ba4e319", // CH/CA/AT/DK (IT traffic via C10)
+  "aa50faf6-8bcf-484c-9d04-f5ae46944dc7", // Arthur | Storm (IT)
 ];
 
 const FIXIE_URL = process.env.FIXIE_URL;
