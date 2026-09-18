@@ -117,6 +117,14 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/fusioncrm-ftd-sync",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/fusioncrm-status-sync",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/ftdhunters-latam-start",
       "schedule": "0 13 * * *"
     },
