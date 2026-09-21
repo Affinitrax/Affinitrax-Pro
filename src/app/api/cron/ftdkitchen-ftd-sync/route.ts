@@ -21,6 +21,7 @@ const FTDKITCHEN_BASE_URL = "https://apiftdkitchen.com";
 const FTDKITCHEN_DEAL_IDS = [
   "26ce38ad-af24-46e4-a7ea-c597b3d3170b", // ZA
   "445b2f4e-c594-4d46-a8e2-75236f6b18ee", // Africa (GH/KE/NG/TZ/ZW/UG)
+  "36a62f7e-d02a-472d-98ce-b57d37936efc", // H2L — Africa (legacy, Jun 2026)
 ];
 
 const FIXIE_URL = process.env.FIXIE_URL;
