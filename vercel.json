@@ -178,7 +178,7 @@
     },
     {
       "path": "/api/cron/c10-ftd-sync",
-      "schedule": "0 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/c10-status-sync",
