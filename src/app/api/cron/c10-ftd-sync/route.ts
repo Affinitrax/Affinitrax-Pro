@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
   for (const c10Lead of ftdLeads) {
     const { data: dbLead } = await admin
       .from("leads")
-      .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id")
+      .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id, email, country")
       .eq("buyer_lead_id", String(c10Lead.id))
       .in("deal_id", C10_DEAL_IDS)
       .maybeSingle();
