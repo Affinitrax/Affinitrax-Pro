@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decrypt } from "@/lib/integration/crypto";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
   for (const lead of withStatus) {
     const { data: dbLead } = await admin
       .from("leads")
-      .select("id, buyer_crm_status")
+      .select("id, buyer_crm_status, email, country")
       .eq("buyer_lead_id", String(lead.id))
       .in("deal_id", C10_DEAL_IDS)
       .maybeSingle();
@@ -135,6 +136,12 @@ export async function GET(request: NextRequest) {
     if (dbLead.buyer_crm_status === lead.esito) { unchanged++; continue; }
 
     await admin.from("leads").update({ buyer_crm_status: lead.esito }).eq("id", dbLead.id);
+
+    if (lead.esito && ["Callback", "Call again", "Richiamare", "Da richiamare"].includes(lead.esito)) {
+      await sendTelegramMessage(
+        `📞 ${lead.esito} | C10 | ${dbLead.email ?? "?"}`
+      ).catch(() => {});
+    }
     synced++;
   }
 
