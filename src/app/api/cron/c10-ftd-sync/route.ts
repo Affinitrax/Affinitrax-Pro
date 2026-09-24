@@ -13,6 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { firePostback } from "@/lib/integration/postback-relay";
 import { decrypt } from "@/lib/integration/crypto";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -181,6 +182,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    await sendTelegramMessage(
+      `💰 FTD | Deal: ${dbLead.deal_id?.slice(0,8) ?? "?"} | ${dbLead.country ?? "?"} | ${dbLead.email ?? "?"}`
+    ).catch(() => {});
     synced++;
   }
 
