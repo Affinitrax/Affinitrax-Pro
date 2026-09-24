@@ -51,9 +51,9 @@ export function isTestPatternEmail(email: string): boolean {
   // 2. Local part ends with _test  (name_test@gmail.com pattern)
   if (local.endsWith("_test")) return true;
 
-  // 3. Local part starts with "test" followed by digit, underscore, or dot
-  //    Catches: test20250826103205, test_jennings81, test.silviu20526, testlead1761397420
-  if (/^test[\d_.]/.test(local)) return true;
+  // 3. Local part starts with "test" followed by digit, underscore, dot, or "test"
+  //    Catches: test20250826103205, test_jennings81, test.silviu20526, testlead1761397420, testtest
+  if (/^test[\d_.t]/.test(local)) return true;
 
   return false;
 }

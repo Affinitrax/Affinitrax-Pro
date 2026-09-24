@@ -22,6 +22,7 @@ const C10_DEAL_IDS = [
   "1fa6a467-4534-410f-86a3-2ac72f61a951", // IT
   "15c1e9d6-b408-4fef-ab54-f7f77ba4e319", // CH/CA/AT/DK (IT traffic via C10)
   "aa50faf6-8bcf-484c-9d04-f5ae46944dc7", // Arthur | Storm (IT)
+  "2ed6eb9f-cd2a-4963-9b3c-c41993a9342b", // ADV — IT (Diadema Fondorio / Immediate Quantaro)
 ];
 
 const FIXIE_URL = process.env.FIXIE_URL;
