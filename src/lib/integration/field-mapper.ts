@@ -36,8 +36,11 @@ function applyTransform(value: string, transform: Transform): string {
       return value.toLowerCase();
     case "e164_phone":
       return toE164(value);
-    case "strip_plus":
-      return value.startsWith("+") ? value.slice(1) : value;
+    case "strip_plus": {
+      const stripped = value.startsWith("+") ? value.slice(1) : value;
+      // Remove any non-digit characters (spaces, dashes, parens) left after stripping +
+      return stripped.replace(/\D/g, "");
+    }
     default:
       // strip_prefix:<digits> — remove leading + and the specified country dial code
       // e.g. transform="strip_prefix:49" on "+4915120297489" → "15120297489"
