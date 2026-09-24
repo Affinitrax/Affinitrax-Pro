@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { firePostback } from "@/lib/integration/postback-relay";
 import { fetch as undiciFetch, ProxyAgent } from "undici";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -111,7 +112,7 @@ export async function GET(request: NextRequest) {
   for (const ftdLead of allLeads) {
     const { data: dbLead } = await admin
       .from("leads")
-      .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id")
+      .select("id, deal_id, status, click_id, sub1, sub2, sub3, buyer_lead_id, email, country")
       .eq("buyer_lead_id", ftdLead.leadRequestIDEncoded)
       .in("deal_id", FTDKITCHEN_DEAL_IDS)
       .maybeSingle();
@@ -161,6 +162,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    await sendTelegramMessage(
+      `💰 FTD | Deal: ${dbLead.deal_id?.slice(0,8) ?? "?"} | ${ftdLead.countryCode ?? "?"} | ${dbLead.email ?? "?"}`
+    ).catch(() => {});
     synced++;
   }
 
