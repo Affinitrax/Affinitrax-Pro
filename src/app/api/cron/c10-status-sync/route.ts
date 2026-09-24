@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
 
     await admin.from("leads").update({ buyer_crm_status: lead.esito }).eq("id", dbLead.id);
 
-    if (lead.esito && ["Callback", "Call again", "Richiamare", "Da richiamare"].includes(lead.esito)) {
+    if (lead.esito && ["Callback", "Call Back", "Call again", "Richiamare", "Da richiamare"].includes(lead.esito)) {
       await sendTelegramMessage(
         `📞 ${lead.esito} | C10 | ${dbLead.email ?? "?"}`
       ).catch(() => {});
