@@ -20,6 +20,7 @@ const FUSION_BASE_URL = "https://tracking.fusioncrm.vip";
 const FUSION_LINK_ID = "203";
 const FUSION_DEAL_IDS = [
   "2cd9ab9b-589e-4a0d-8584-df0ebe7edbe2", // BLVD — FR
+  "283bb05a-81d4-4772-a430-be6f508f1820", // crypto sell — FR
 ];
 
 type FusionLead = {
