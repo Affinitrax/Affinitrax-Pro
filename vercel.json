@@ -170,7 +170,7 @@
     },
     {
       "path": "/api/cron/ftdkitchen-ftd-sync",
-      "schedule": "0 * * * *"
+      "schedule": "*/10 * * * *"
     },
     {
       "path": "/api/cron/ftdkitchen-status-sync",
